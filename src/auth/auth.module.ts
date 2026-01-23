@@ -6,7 +6,9 @@ import { PassportModule } from '@nestjs/passport';
 import { JwtModule } from '@nestjs/jwt';
 import { ConfigService } from '@nestjs/config';
 import { JwtStrategy } from './strategies/jwt.strategies';
-
+import { MongooseModule } from '@nestjs/mongoose';
+import { RefreshToken, RefreshTokenSchema } from './refresh-token.schema';
+import { AuthRepository } from './auth.repository';
 
 @Module({
   imports: [
@@ -19,8 +21,12 @@ import { JwtStrategy } from './strategies/jwt.strategies';
         signOptions: { expiresIn: config.get('jwt.access.expiresIn') },
       }),
     }),
+    MongooseModule.forFeature([
+      { name: RefreshToken.name, schema: RefreshTokenSchema },
+    ]),
   ],
   controllers: [AuthController],
-  providers: [AuthService, JwtStrategy],
+  providers: [AuthService, JwtStrategy, AuthRepository],
+  exports: [AuthRepository],
 })
 export class AuthModule {}

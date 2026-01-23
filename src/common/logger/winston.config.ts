@@ -7,10 +7,9 @@ export const winstonConfig = {
       level: 'info',
       format: winston.format.combine(
         winston.format.timestamp(),
-        nestWinstonModuleUtilities.format.nestLike(
-          'SCRAP-BACKEND',
-          { prettyPrint: true },
-        ),
+        nestWinstonModuleUtilities.format.nestLike('SCRAP-BACKEND', {
+          prettyPrint: true,
+        }),
       ),
     }),
   ],

@@ -7,8 +7,9 @@ import { OrganizationsRepository } from './organizations.repository';
 
 @Module({
   imports: [
-    MongooseModule.forFeature([{ name: organizations.name, schema: organizationsSchema }]),
-
+    MongooseModule.forFeature([
+      { name: organizations.name, schema: organizationsSchema },
+    ]),
   ],
   controllers: [OrganizationsController],
   providers: [OrganizationsService, OrganizationsRepository],

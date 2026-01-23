@@ -1,61 +1,83 @@
-import { Injectable } from "@nestjs/common";
-import { InjectModel } from "@nestjs/mongoose";
-import { User, UserDocument } from "./users.schema";
-import { Model } from "mongoose";
-import { Role } from "src/common/enum/role.enum";
+import { Injectable } from '@nestjs/common';
+import { InjectModel } from '@nestjs/mongoose';
+import { User, UserDocument } from './users.schema';
+import { Model } from 'mongoose';
+import { Role } from 'src/common/enum/role.enum';
 
 @Injectable()
 export class UsersRepository {
-    constructor(
-        @InjectModel(User.name)
-        private readonly userModel: Model<UserDocument>,
-    ) {}
+  constructor(
+    @InjectModel(User.name)
+    private readonly userModel: Model<UserDocument>,
+  ) {}
 
-    async findByEmail(email: string) {
-        return this.userModel.findOne({ email }).select('+password');
-    }
+  async findByEmail(email: string) {
+    console.log('emaillllll', email);
+    // return this.userModel.findOne({ email }).select('+password');
+    const user = await this.userModel.findOne({ email }).select('+password');
+    console.log('userrrrrrrrr', user);
+    return user;
+  }
 
-    async findById(id: string) {
-        return this.userModel.findById(id);
-    }
+  async findById(id: string) {
+    return this.userModel.findById(id);
+  }
 
-    async create(userData: Partial<User>) {
-        return this.userModel.create(userData);
-    }
+  async findByIdWithRefreshToken(id: string) {
+    return this.userModel.findById(id).select('+refreshToken');
+  }
 
-    async update(id: string, updateData: Partial<User>) {
-        return this.userModel.findByIdAndUpdate(id, updateData, { new: true });
-    }
+  async create(userData: Partial<User>) {
+    return this.userModel.create(userData);
+  }
 
-    async delete(id: string) {
-        return this.userModel.findByIdAndDelete(id);
-    }
+  async update(id: string, updateData: Partial<User>) {
+    return this.userModel.findByIdAndUpdate(id, updateData, { new: true });
+  }
 
-    async findAll() {
-        return this.userModel.find();
-    }
+  async delete(id: string) {
+    return this.userModel.findByIdAndDelete(id);
+  }
 
-    async exists(filter: Partial<User>) {
-        return this.userModel.exists(filter);
-    }
+  async findAll() {
+    return this.userModel.find();
+  }
 
-    async findAdminByOrganization(organizationId: string) {
-        return this.userModel.findOne({ organization: organizationId, role: Role.ADMIN });
-    }
-    async updateRefreshToken(id: string, refreshToken: string) {
-        return this.userModel.findByIdAndUpdate(id, { refreshToken }, { new: true });
-    }
+  async exists(filter: Partial<User>) {
+    return this.userModel.exists(filter);
+  }
 
-    async findAllStaffByOrganization(organizationId: string) {
-        return this.userModel.find({ organization: organizationId, role: Role.STAFF });
-    }
+  async findAdminByOrganization(organizationId: string) {
+    return this.userModel.findOne({
+      organizationId: organizationId,
+      role: Role.ADMIN,
+    });
+  }
+  async updateRefreshToken(id: string, refreshToken: string) {
+    return this.userModel.findByIdAndUpdate(
+      id,
+      { refreshToken },
+      { new: true },
+    );
+  }
 
-    async findPaginated(filter: Partial<User>, page: number, limit: number) {
-        const skip = (page - 1) * limit;
-        const [data, total] = await Promise.all([
-            this.userModel.find(filter).skip(skip).limit(limit).sort({ createdAt: -1 }),
-            this.userModel.countDocuments(filter),
-        ]);
-        return { data, total };
-    }
+  async findAllStaffByOrganization(organizationId: string) {
+    return this.userModel.find({
+      organizationId: organizationId,
+      role: Role.STAFF,
+    });
+  }
+
+  async findPaginated(filter: Partial<User>, page: number, limit: number) {
+    const skip = (page - 1) * limit;
+    const [data, total] = await Promise.all([
+      this.userModel
+        .find(filter)
+        .skip(skip)
+        .limit(limit)
+        .sort({ createdAt: -1 }),
+      this.userModel.countDocuments(filter),
+    ]);
+    return { data, total };
+  }
 }
