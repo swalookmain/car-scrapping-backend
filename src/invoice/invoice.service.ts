@@ -14,6 +14,8 @@ import { UpdateVechileInvoiceDto } from './dto/update-vechile-invoice.dto';
 import { VechileInvoice } from './vechile-invoice.schema';
 import { PaginatedResponse } from 'src/common/interface/paginated-response.interface';
 import { getPagination } from 'src/common/utils/pagination.util';
+import { StorageService, UploadFile } from 'src/common/services/storage.service';
+import { UploadPurchaseDocumentDto } from './dto/upload-purchase-document.dto';
 
 
 @Injectable()
@@ -21,6 +23,7 @@ export class InvoiceService {
     constructor(
       private readonly invoiceRepository: InvoiceRepository,
       private readonly organizationsService: OrganizationsService,
+      private readonly storageService: StorageService,
       @Inject(WINSTON_MODULE_NEST_PROVIDER)
       private readonly logger: LoggerService,
     ){}
@@ -44,7 +47,7 @@ export class InvoiceService {
         const invoice = await this.invoiceRepository.createInvoice(invoicePayload);
         return invoice;
       } catch (error) {
-        if(error instanceof NotFoundException) {
+        if(error instanceof NotFoundException || error instanceof BadRequestException) {
           throw error;
         }
         const errorMessage = error instanceof Error ? error.message : 'Unknown error';
@@ -68,6 +71,15 @@ export class InvoiceService {
         const invoice = await this.invoiceRepository.getInvoiceById(sanitizedData.invoiceId);
         if(!invoice) {
           throw new NotFoundException('Invoice not found');
+        }
+
+        if(invoice.status === InvoiceStatus.CONFIRMED) {
+          throw new BadRequestException('other vechile exist in this invoice');
+        }
+
+        const registerationNumberExist = await this.invoiceRepository.getVechileInvoiceByRegistrationNumber(sanitizedData.registrationNumber as string);
+        if(registerationNumberExist) {
+          throw new BadRequestException('Registration number already exists');
         }
         const vechileInvoice = await this.invoiceRepository.createVechileInvoice({
           ...sanitizedData,
@@ -98,6 +110,9 @@ export class InvoiceService {
         const invoice = await this.invoiceRepository.getInvoiceById(invoiceId);
         if(!invoice) {
           throw new NotFoundException('Invoice not found');
+        }
+        if (invoice.status === InvoiceStatus.CONFIRMED) {
+          throw new BadRequestException('Confirmed invoices cannot be updated');
         }
       const { purchaseDate, ...restData } = sanitizedData;
         const updateData = {
@@ -134,6 +149,12 @@ export class InvoiceService {
         const vechileInvoice = await this.invoiceRepository.getVechileInvoiceById(vechileInvoiceId);
         if(!vechileInvoice) {
           throw new NotFoundException('Vechile invoice not found');
+        }
+        const parentInvoice = await this.invoiceRepository.getInvoiceById(
+          vechileInvoice.invoiceId.toString(),
+        );
+        if (parentInvoice?.status === InvoiceStatus.CONFIRMED) {
+          throw new BadRequestException('Confirmed invoices cannot be updated');
         }
         const { invoiceId, ...restData } = sanitizedData;
         const updateData: Partial<VechileInvoice> = {
@@ -236,13 +257,11 @@ export class InvoiceService {
       try {
         const orgId = this.getOrgId(authenticatedUser);
         const { page: safePage, limit: safeLimit } = getPagination(page, limit);
-        const { data, total } =
-          await this.invoiceRepository.findVechileInvoices(
+        const { data, total } = await this.invoiceRepository.findVechileInvoices(
             { organizationId: orgId },
             safePage,
             safeLimit,
           );
-          console.log('vechileInvoice',data);
 
         const totalPages = Math.ceil(total / safeLimit);
 
@@ -279,13 +298,27 @@ export class InvoiceService {
         if(!invoice) {
           throw new NotFoundException('Invoice not found');
         }
-        await this.invoiceRepository.deleteInvoice(invoiceId);
-        // need to delete all vechile invoices related to this invoice
-        await this.invoiceRepository.deleteVechileInvoices(invoiceId);
-        return { message: 'Invoice deleted successfully' };
+        if (invoice.status !== InvoiceStatus.CONFIRMED) {
+          const deletedInvoice = await this.invoiceRepository.deleteInvoice(invoiceId);
+          return {
+            message: 'Invoice deleted successfully',
+            invoice: deletedInvoice,
+          };
+        }
+        const updatedInvoice = await this.invoiceRepository.updateInvoice(
+          invoiceId,
+          {
+            deletedAt: new Date(),
+            deletedBy: new Types.ObjectId(authenticatedUser.userId),
+          },
+        );
+        return {
+          message: 'Invoice deleted successfully',
+          invoice: updatedInvoice,
+        };
       }
       catch (error) {
-        if(error instanceof NotFoundException) {
+        if(error instanceof NotFoundException || error instanceof BadRequestException) {
           throw error;
         }
         const errorMessage = error instanceof Error ? error.message : 'Unknown error';
@@ -307,13 +340,28 @@ export class InvoiceService {
         if(!vechileInvoice) {
           throw new NotFoundException('Vechile invoice not found');
         }
+        const parentInvoice = await this.invoiceRepository.getInvoiceById(
+          vechileInvoice.invoiceId.toString(),
+        );
+        if (parentInvoice?.status === InvoiceStatus.CONFIRMED) {
+          throw new BadRequestException('Confirmed invoices cannot be updated');
+        }
         await this.invoiceRepository.deleteVechileInvoice(vechileInvoiceId);
         // need to delete invoice related to this vechile invoice
-        await this.invoiceRepository.deleteInvoice(vechileInvoice.invoiceId.toString());
-        return { message: 'Vechile invoice deleted successfully' };
+        const updatedInvoice = await this.invoiceRepository.updateInvoice(
+          vechileInvoice.invoiceId.toString(),
+          {
+            deletedAt: new Date(),
+            deletedBy: new Types.ObjectId(authenticatedUser.userId),
+          },
+        );
+        return {
+          message: 'Vechile invoice deleted successfully',
+          invoice: updatedInvoice,
+        };
       }
       catch (error) {
-        if(error instanceof NotFoundException) {
+        if(error instanceof NotFoundException || error instanceof BadRequestException) {
           throw error;
         }
         const errorMessage = error instanceof Error ? error.message : 'Unknown error';
@@ -321,6 +369,125 @@ export class InvoiceService {
         this.logger.error(errorMessage, errorStack, 'InvoiceService');
         throw new BadRequestException('Failed to delete vechile invoice');
       }
+    }
+
+    async uploadPurchaseDocuments(
+      uploadDto: UploadPurchaseDocumentDto,
+      files: {
+        rc?: UploadFile[];
+        ownerId?: UploadFile[];
+        otherDocument?: UploadFile[];
+      },
+      authenticatedUser: AuthenticatedUser,
+    ) {
+      try {
+        const orgId = this.getOrgId(authenticatedUser);
+        const organization = await this.organizationsService.getById(orgId);
+        if (!organization) {
+          throw new NotFoundException('Organization not found');
+        }
+
+        const invoice = await this.invoiceRepository.getInvoiceById(
+          uploadDto.invoiceId,
+        );
+        if (!invoice) {
+          throw new NotFoundException('Invoice not found');
+        }
+        if (invoice.organizationId?.toString() !== orgId) {
+          throw new BadRequestException('Invoice does not belong to organization');
+        }
+
+        if (uploadDto.vechileInvoiceId) {
+          const vechileInvoice =
+            await this.invoiceRepository.getVechileInvoiceById(
+              uploadDto.vechileInvoiceId,
+            );
+          if (!vechileInvoice) {
+            throw new NotFoundException('Vechile invoice not found');
+          }
+          if (vechileInvoice.organizationId?.toString() !== orgId) {
+            throw new BadRequestException(
+              'Vechile invoice does not belong to organization',
+            );
+          }
+        }
+
+        const resolveFile = (value?: UploadFile[]): UploadFile | undefined => {
+          if (!value || !Array.isArray(value)) {
+            return undefined;
+          }
+          return value[0];
+        };
+
+        const fileEntries: Array<{
+          file: UploadFile;
+          documentType: 'rc' | 'ownerId' | 'other';
+        }> = [];
+        const rcFile = resolveFile(files?.rc);
+        if (rcFile) {
+          fileEntries.push({ file: rcFile, documentType: 'rc' });
+        }
+        const ownerIdFile = resolveFile(files?.ownerId);
+        if (ownerIdFile) {
+          fileEntries.push({ file: ownerIdFile, documentType: 'ownerId' });
+        }
+        const otherFile = resolveFile(files?.otherDocument);
+        if (otherFile) {
+          fileEntries.push({ file: otherFile, documentType: 'other' });
+        }
+
+        if (fileEntries.length === 0) {
+          return { message: 'No documents uploaded', documents: [] };
+        }
+
+        const prefix = `purchase-documents/${orgId}/${uploadDto.invoiceId}`;
+        const uploads = await Promise.all(
+          fileEntries.map(async ({ file, documentType }) => {
+            const upload = await this.storageService.uploadFile(file, prefix);
+            return {
+              invoiceId: new Types.ObjectId(uploadDto.invoiceId),
+              vechileInvoiceId: uploadDto.vechileInvoiceId
+                ? new Types.ObjectId(uploadDto.vechileInvoiceId)
+                : undefined,
+              organizationId: new Types.ObjectId(orgId),
+              uploadedBy: new Types.ObjectId(authenticatedUser.userId),
+              fileName: file.originalname,
+              mimeType: file.mimetype,
+              size: file.size,
+              url: upload.url,
+              storageKey: upload.storageKey,
+              provider: upload.provider,
+              documentType,
+            };
+          }),
+        );
+
+        const saved =
+          await this.invoiceRepository.createPurchaseDocuments(uploads);
+        return { message: 'Documents uploaded', documents: saved };
+      } catch (error) {
+        if (
+          error instanceof NotFoundException ||
+          error instanceof BadRequestException
+        ) {
+          throw error;
+        }
+        const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+        const errorStack = error instanceof Error ? error.stack : undefined;
+        this.logger.error(errorMessage, errorStack, 'InvoiceService');
+        throw new BadRequestException('Failed to upload purchase documents');
+      }
+    }
+
+    async getPurchaseDocuments(
+      invoiceId: string,
+      authenticatedUser: AuthenticatedUser,
+    ) {
+      const orgId = this.getOrgId(authenticatedUser);
+      return this.invoiceRepository.findPurchaseDocumentsByInvoice(
+        invoiceId,
+        orgId,
+      );
     }
 
     private getOrgId(authenticatedUser: AuthenticatedUser): string {

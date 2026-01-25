@@ -6,6 +6,10 @@ import {
   VechileInvoice,
   VechileInvoiceDocument,
 } from './vechile-invoice.schema';
+import {
+  PurchaseDocument,
+  PurchaseDocumentDocument,
+} from './purchase-document.schema';
 
 @Injectable()
 export class InvoiceRepository {
@@ -14,6 +18,8 @@ export class InvoiceRepository {
     private readonly invoiceModel: Model<InvoiceDocument>,
     @InjectModel(VechileInvoice.name)
     private readonly vechileInvoiceModel: Model<VechileInvoiceDocument>,
+    @InjectModel(PurchaseDocument.name)
+    private readonly purchaseDocumentModel: Model<PurchaseDocumentDocument>,
   ) {}
 
   async createInvoice(invoiceData: Partial<Invoice>) {
@@ -89,10 +95,24 @@ export class InvoiceRepository {
     return this.vechileInvoiceModel.deleteMany({ invoiceId });
   }
 
+  async createPurchaseDocuments(docs: Partial<PurchaseDocument>[]) {
+    return this.purchaseDocumentModel.insertMany(docs);
+  }
+
+  async findPurchaseDocumentsByInvoice(invoiceId: string, orgId: string) {
+    return this.purchaseDocumentModel
+      .find({ invoiceId, organizationId: orgId })
+      .sort({ createdAt: -1 });
+  }
+
   async getInvoiceById(id: string) {
     return this.invoiceModel.findById(id);
   }
   async getVechileInvoiceById(id: string) {
     return this.vechileInvoiceModel.findById(id);
+  }
+
+  async getVechileInvoiceByRegistrationNumber(registrationNumber: string) {
+    return this.vechileInvoiceModel.findOne({ registrationNumber });
   }
 }

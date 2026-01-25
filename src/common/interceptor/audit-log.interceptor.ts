@@ -197,6 +197,9 @@ export class AuditLogInterceptor implements NestInterceptor {
     if (method === 'POST' && path === '/invoice/vechile') {
       return AuditAction.CREATE_VECHILE_INVOICE;
     }
+    if (method === 'POST' && path === '/invoice/purchase-documents') {
+      return AuditAction.UPLOAD_PURCHASE_DOCUMENT;
+    }
     if (method === 'PATCH' && /^\/invoice\/[^/]+$/.test(path)) {
       return AuditAction.UPDATE_INVOICE;
     }

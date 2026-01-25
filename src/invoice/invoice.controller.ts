@@ -26,8 +26,20 @@ import {
   ApiQuery,
   ApiOperation,
   ApiResponse,
+  ApiConsumes,
+  ApiBody,
 } from '@nestjs/swagger';
 import { PaginationQueryDto } from 'src/common/dto/pagination-query.dto';
+import { UploadPurchaseDocumentDto } from './dto/upload-purchase-document.dto';
+import { QueryPurchaseDocumentDto } from './dto/query-purchase-document.dto';
+import { FileFieldsInterceptor } from '@nestjs/platform-express';
+import { UploadedFiles, UseInterceptors } from '@nestjs/common';
+import { memoryStorage } from 'multer';
+import type { Express } from 'express';
+import type { MulterOptions } from '@nestjs/platform-express/multer/interfaces/multer-options.interface';
+
+// eslint-disable-next-line @typescript-eslint/no-unsafe-call, @typescript-eslint/no-unsafe-assignment
+const uploadStorage = memoryStorage();
 
 @ApiTags('Invoice')
 @ApiBearerAuth()
@@ -204,5 +216,79 @@ export class InvoiceController {
     @GetUser() authenticatedUser: AuthenticatedUser,
   ) {
     return this.invoiceService.deleteVechileInvoice(id, authenticatedUser);
+  }
+
+  @Post('purchase-documents')
+  @Roles(Role.ADMIN, Role.STAFF)
+  @ApiOperation({ summary: 'Upload purchase documents' })
+  @ApiConsumes('multipart/form-data')
+  @ApiBody({
+    schema: {
+      type: 'object',
+      properties: {
+        invoiceId: { type: 'string' },
+        vechileInvoiceId: { type: 'string' },
+        rc: { type: 'string', format: 'binary' },
+        ownerId: { type: 'string', format: 'binary' },
+        otherDocument: { type: 'string', format: 'binary' },
+      },
+      required: ['invoiceId'],
+    },
+  })
+  @ApiResponse({
+    status: 201,
+    description: 'Purchase documents uploaded successfully',
+  })
+  @UseInterceptors(
+    FileFieldsInterceptor(
+      [
+        { name: 'rc', maxCount: 1 },
+        { name: 'ownerId', maxCount: 1 },
+        { name: 'otherDocument', maxCount: 1 },
+      ],
+      {
+        // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
+        storage: uploadStorage as MulterOptions['storage'],
+      },
+    ),
+  )
+  uploadPurchaseDocuments(
+    @Body() uploadDto: UploadPurchaseDocumentDto,
+    @UploadedFiles()
+    files: {
+      rc?: Express.Multer.File[];
+      ownerId?: Express.Multer.File[];
+      otherDocument?: Express.Multer.File[];
+    },
+    @GetUser() authenticatedUser: AuthenticatedUser,
+  ) {
+    return this.invoiceService.uploadPurchaseDocuments(
+      uploadDto,
+      files,
+      authenticatedUser,
+    );
+  }
+
+  @Get('purchase-documents')
+  @Roles(Role.ADMIN, Role.STAFF)
+  @ApiOperation({ summary: 'Get purchase documents by invoice' })
+  @ApiQuery({
+    name: 'invoiceId',
+    required: true,
+    type: String,
+    description: 'Invoice ID',
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'Purchase documents retrieved successfully',
+  })
+  getPurchaseDocuments(
+    @Query() query: QueryPurchaseDocumentDto,
+    @GetUser() authenticatedUser: AuthenticatedUser,
+  ) {
+    return this.invoiceService.getPurchaseDocuments(
+      query.invoiceId,
+      authenticatedUser,
+    );
   }
 }
