@@ -1,5 +1,5 @@
 export enum SellerType {
-  GOVERNMENT = 'GOVERNMENT',
-  PRIVATE_ENTITY = 'PRIVATE_ENTITY',
-  INDIVIDUAL = 'INDIVIDUAL',
+  DIRECT = 'DIRECT',
+  MSTC = 'MSTC',
+  GEM = 'GEM',
 }

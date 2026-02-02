@@ -68,7 +68,7 @@ export class UsersController {
 
   @Get()
   @Roles(Role.SUPER_ADMIN)
-  @ApiOperation({ summary: 'Get all users with pagination' })
+  @ApiOperation({ summary: 'Get all admin user with pagination, only for superadmin' })
   @ApiQuery({
     name: 'page',
     required: false,
@@ -81,9 +81,19 @@ export class UsersController {
     type: Number,
     description: 'Items per page (default: 10, max: 100)',
   })
+  @ApiQuery({
+    name: 'organizationId',
+    required: false,
+    type: String,
+    description: 'Filter admins by organization ID',
+  })
   @ApiResponse({ status: 200, description: 'Users retrieved successfully' })
-  async findAllUser(@Query() query: PaginationQueryDto) {
-    return this.usersService.findAllUser(query.page, query.limit);
+  async findAllUser(@Query() query: PaginationQueryDto & { organizationId?: string }) {
+    return this.usersService.findAllUser(
+      query.organizationId,
+      query.page,
+      query.limit,
+    );
   }
 
   @Get(':id')

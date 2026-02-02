@@ -43,6 +43,10 @@ export class UsersRepository {
     return this.userModel.find();
   }
 
+  async findAllByFilter(filter: Partial<User>) {
+    return this.userModel.find(filter);
+  }
+
   async exists(filter: Partial<User>) {
     return this.userModel.exists(filter);
   }

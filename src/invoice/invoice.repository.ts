@@ -43,7 +43,7 @@ export class InvoiceRepository {
     return { data, total };
   }
 
-  async updateInvoice(id: string, updateData: Partial<Invoice>) {
+  async updateInvoice(id: string, updateData: Record<string, unknown>) {
     return this.invoiceModel.findByIdAndUpdate(id, updateData, { new: true });
   }
 
@@ -113,6 +113,8 @@ export class InvoiceRepository {
   }
 
   async getVechileInvoiceByRegistrationNumber(registrationNumber: string) {
-    return this.vechileInvoiceModel.findOne({ registrationNumber });
+    return this.vechileInvoiceModel.findOne({
+      registration_number: registrationNumber,
+    });
   }
 }

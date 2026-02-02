@@ -211,15 +211,27 @@ export class UsersService {
       throw new BadRequestException('Failed to create staff user');
     }
   }
-
   async findAllUser(
+    organizationId?: string,
     page?: number,
     limit?: number,
   ): Promise<PaginatedResponse<any> | any[]> {
+    const filter: Record<string, unknown> = {
+      role: Role.ADMIN,
+    };
+
+    if (organizationId) {
+      const validatedOrgId = validateObjectId(
+        organizationId,
+        'Organization ID',
+      );
+      filter.organizationId = validatedOrgId;
+    }
+
     if (page !== undefined && limit !== undefined) {
       const { page: safePage, limit: safeLimit } = getPagination(page, limit);
       const { data, total } = await this.userRepo.findPaginated(
-        {},
+        filter,
         safePage,
         safeLimit,
       );
@@ -242,7 +254,7 @@ export class UsersService {
         },
       };
     }
-    const users = await this.userRepo.findAll();
+    const users = await this.userRepo.findAllByFilter(filter);
     return users.map((user) => {
       const userObj = user.toObject ? user.toObject() : user;
       // eslint-disable-next-line @typescript-eslint/no-unused-vars

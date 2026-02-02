@@ -1,5 +1,6 @@
 export enum VechicleStatus {
     PURCHASED = 'PURCHASED',
     DISMANTLED = 'DISMANTLED',
-    SOLD = 'SOLD',
+    DISMANTLING_IN_PROGRESS = 'DISMANTLING_IN_PROGRESS',
+    SOLD_OUT = 'SOLD_OUT',
 }

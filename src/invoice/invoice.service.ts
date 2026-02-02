@@ -16,6 +16,7 @@ import { PaginatedResponse } from 'src/common/interface/paginated-response.inter
 import { getPagination } from 'src/common/utils/pagination.util';
 import { StorageService, UploadFile } from 'src/common/services/storage.service';
 import { UploadPurchaseDocumentDto } from './dto/upload-purchase-document.dto';
+import { SellerType } from 'src/common/enum/sellerType.enum';
 
 
 @Injectable()
@@ -31,18 +32,27 @@ export class InvoiceService {
     async createInvoice(createInvoiceDto: CreateInvoiceDto, authenticatedUser: AuthenticatedUser) {
       try {
         const sanitizedData = sanitizeObject(createInvoiceDto) as CreateInvoiceDto;
+        this.assertSellerTypeFields(sanitizedData.sellerType, sanitizedData);
         const orgId = this.getOrgId(authenticatedUser);
         const organization = await this.organizationsService.getById(orgId);
         if(!organization) {
           throw new NotFoundException('Organization not found');
         }
-        const { purchaseDate, ...restData } = sanitizedData;
+        const { purchaseDate, auctionDate, ...restData } = sanitizedData;
+        const purchaseDateValue =
+          typeof purchaseDate === 'string' ? purchaseDate : undefined;
+        const auctionDateValue =
+          typeof auctionDate === 'string' ? auctionDate : undefined;
         const invoicePayload = {
           ...restData,
           organizationId: new Types.ObjectId(orgId),
           createdBy: new Types.ObjectId(authenticatedUser.userId),
           updatedBy: new Types.ObjectId(authenticatedUser.userId),
-          ...(purchaseDate ? { purchaseDate: new Date(purchaseDate) } : {}),
+          __t: this.getDiscriminatorKeyValue(sanitizedData.sellerType),
+          ...(purchaseDateValue
+            ? { purchaseDate: new Date(purchaseDateValue) }
+            : {}),
+          ...(auctionDateValue ? { auctionDate: new Date(auctionDateValue) } : {}),
         };
         const invoice = await this.invoiceRepository.createInvoice(invoicePayload);
         return invoice;
@@ -77,15 +87,34 @@ export class InvoiceService {
           throw new BadRequestException('other vechile exist in this invoice');
         }
 
-        const registerationNumberExist = await this.invoiceRepository.getVechileInvoiceByRegistrationNumber(sanitizedData.registrationNumber as string);
+        const registerationNumberExist =
+          await this.invoiceRepository.getVechileInvoiceByRegistrationNumber(
+            sanitizedData.registration_number as string,
+          );
         if(registerationNumberExist) {
           throw new BadRequestException('Registration number already exists');
         }
-        const vechileInvoice = await this.invoiceRepository.createVechileInvoice({
-          ...sanitizedData,
-          invoiceId: new Types.ObjectId(sanitizedData.invoiceId),
-          organizationId: new Types.ObjectId(orgId),
-        });
+        const { model, ...restData } = sanitizedData as Record<string, unknown>;
+        const normalizedData = {
+          ...restData,
+          ...(typeof model === 'string' ? { model_name: model } : {}),
+        } as Record<string, unknown>;
+        const vehiclePurchaseDateValue =
+          typeof normalizedData.vehicle_purchase_date === 'string'
+            ? normalizedData.vehicle_purchase_date
+            : undefined;
+        const vechileInvoice = await this.invoiceRepository.createVechileInvoice(
+          {
+            ...normalizedData,
+            invoiceId: new Types.ObjectId(sanitizedData.invoiceId),
+            organizationId: new Types.ObjectId(orgId),
+            ...(vehiclePurchaseDateValue
+              ? {
+                  vehicle_purchase_date: new Date(vehiclePurchaseDateValue),
+                }
+              : {}),
+          },
+        );
         // need to update status of invocie to confirmed
         await this.updateInvoice(invoice._id.toString(), { status: InvoiceStatus.CONFIRMED }, authenticatedUser);
         return vechileInvoice;
@@ -114,13 +143,40 @@ export class InvoiceService {
         if (invoice.status === InvoiceStatus.CONFIRMED) {
           throw new BadRequestException('Confirmed invoices cannot be updated');
         }
-      const { purchaseDate, ...restData } = sanitizedData;
-        const updateData = {
+        if (sanitizedData.sellerType) {
+          this.assertSellerTypeFields(sanitizedData.sellerType, sanitizedData);
+        }
+        const { purchaseDate, auctionDate, ...restData } = sanitizedData;
+        const purchaseDateValue =
+          typeof purchaseDate === 'string' ? purchaseDate : undefined;
+        const auctionDateValue =
+          typeof auctionDate === 'string' ? auctionDate : undefined;
+        const updateFields = {
           ...restData,
-        organizationId: new Types.ObjectId(orgId),
-          ...(purchaseDate ? { purchaseDate: new Date(purchaseDate) } : {}),
+          organizationId: new Types.ObjectId(orgId),
+          ...(purchaseDateValue
+            ? { purchaseDate: new Date(purchaseDateValue) }
+            : {}),
+          ...(auctionDateValue ? { auctionDate: new Date(auctionDateValue) } : {}),
           updatedBy: new Types.ObjectId(authenticatedUser.userId),
         };
+        const updateData: Record<string, unknown> = {
+          $set: updateFields,
+        };
+
+        if (
+          sanitizedData.sellerType &&
+          sanitizedData.sellerType !== invoice.sellerType
+        ) {
+          updateData.$unset = this.getSellerTypeUnsetFields(
+            sanitizedData.sellerType,
+          );
+          updateData.$set = {
+            ...(updateData.$set as Record<string, unknown>),
+            __t: this.getDiscriminatorKeyValue(sanitizedData.sellerType),
+          };
+        }
+
         const updatedInvoice = await this.invoiceRepository.updateInvoice(
           invoiceId,
           updateData,
@@ -156,11 +212,25 @@ export class InvoiceService {
         if (parentInvoice?.status === InvoiceStatus.CONFIRMED) {
           throw new BadRequestException('Confirmed invoices cannot be updated');
         }
-        const { invoiceId, ...restData } = sanitizedData;
-        const updateData: Partial<VechileInvoice> = {
+        const { invoiceId, vehicle_purchase_date, model, ...restData } =
+          sanitizedData as Record<string, unknown>;
+        const normalizedData = {
           ...restData,
+          ...(typeof model === 'string' ? { model_name: model } : {}),
+        } as Record<string, unknown>;
+        const vehiclePurchaseDateValue =
+          typeof vehicle_purchase_date === 'string'
+            ? vehicle_purchase_date
+            : undefined;
+        const updateData: Partial<VechileInvoice> = {
+          ...normalizedData,
           organizationId: new Types.ObjectId(orgId),
-          ...(invoiceId ? { invoiceId: new Types.ObjectId(invoiceId) } : {}),
+          ...(typeof invoiceId === 'string'
+            ? { invoiceId: new Types.ObjectId(invoiceId) }
+            : {}),
+          ...(vehiclePurchaseDateValue
+            ? { vehicle_purchase_date: new Date(vehiclePurchaseDateValue) }
+            : {}),
         };
         const updatedVechileInvoice = await this.invoiceRepository.updateVechileInvoice(vechileInvoiceId, updateData);
         return updatedVechileInvoice;
@@ -488,6 +558,78 @@ export class InvoiceService {
         invoiceId,
         orgId,
       );
+    }
+
+    private assertSellerTypeFields(
+      sellerType: SellerType,
+      data: Partial<CreateInvoiceDto>,
+    ): void {
+      const requiredFields: Record<SellerType, Array<keyof CreateInvoiceDto>> = {
+        [SellerType.DIRECT]: [
+          'mobile',
+          'email',
+          'aadhaarNumber',
+          'panNumber',
+          'leadSource',
+        ],
+        [SellerType.MSTC]: [
+          'auctionNumber',
+          'auctionDate',
+          'source',
+          'lotNumber',
+        ],
+        [SellerType.GEM]: [],
+      };
+
+      const missing = (requiredFields[sellerType] || []).filter((field) => {
+        const value = data[field];
+        return value === undefined || value === null || value === '';
+      });
+
+      if (missing.length > 0) {
+        throw new BadRequestException(
+          `Missing required fields for ${sellerType}: ${missing.join(', ')}`,
+        );
+      }
+    }
+
+    private getSellerTypeUnsetFields(
+      sellerType: SellerType,
+    ): Record<string, ''> {
+      const directFields = [
+        'mobile',
+        'email',
+        'aadhaarNumber',
+        'panNumber',
+        'leadSource',
+      ];
+      const mstcFields = ['auctionNumber', 'auctionDate', 'source', 'lotNumber'];
+
+      if (sellerType === SellerType.DIRECT) {
+        return mstcFields.reduce<Record<string, ''>>((acc, field) => {
+          acc[field] = '';
+          return acc;
+        }, {});
+      }
+
+      if (sellerType === SellerType.MSTC) {
+        return directFields.reduce<Record<string, ''>>((acc, field) => {
+          acc[field] = '';
+          return acc;
+        }, {});
+      }
+
+      return [...directFields, ...mstcFields].reduce<Record<string, ''>>(
+        (acc, field) => {
+          acc[field] = '';
+          return acc;
+        },
+        {},
+      );
+    }
+
+    private getDiscriminatorKeyValue(sellerType: SellerType): SellerType {
+      return sellerType;
     }
 
     private getOrgId(authenticatedUser: AuthenticatedUser): string {
