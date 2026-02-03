@@ -40,11 +40,10 @@ async function bootstrap() {
   //   allowedHeaders: ['Content-Type', 'Authorization'],
   // });
   app.enableCors({
-  origin: true,
+  origin: true, 
   credentials: true,
-  methods: '*',
-  allowedHeaders: '*',
 });
+
 
 
   // Security: Rate limiting
