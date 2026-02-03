@@ -31,14 +31,21 @@ async function bootstrap() {
   );
 
   // Security: CORS configuration
+  // app.enableCors({
+  //   origin: process.env.ALLOWED_ORIGINS?.split(',') || [
+  //     'http://localhost:3000',
+  //   ],
+  //   credentials: true,
+  //   methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
+  //   allowedHeaders: ['Content-Type', 'Authorization'],
+  // });
   app.enableCors({
-    origin: process.env.ALLOWED_ORIGINS?.split(',') || [
-      'http://localhost:3000',
-    ],
-    credentials: true,
-    methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
-    allowedHeaders: ['Content-Type', 'Authorization'],
-  });
+  origin: true,
+  credentials: true,
+  methods: '*',
+  allowedHeaders: '*',
+});
+
 
   // Security: Rate limiting
   const limiter = rateLimit({
