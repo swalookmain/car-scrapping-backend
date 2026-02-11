@@ -1,0 +1,11 @@
+export enum PartType {
+    ENGINE = 'ENGINE',
+    TRANSMISSION = 'TRANSMISSION',
+    BRAKES = 'BRAKES',
+    SUSPENSION = 'SUSPENSION',
+    ELECTRICAL = 'ELECTRICAL',
+    EXHAUST = 'EXHAUST',
+    BODY = 'BODY',
+    PLASTIC = 'PLASTIC',
+    OTHER = 'OTHER',
+}

@@ -1,0 +1,6 @@
+export enum Status {
+    AVAILABLE = 'AVAILABLE',
+    PARTIAL_SOLD = 'PARTIAL_SOLD',
+    SOLD_OUT = 'SOLD_OUT',
+    DAMAGE_ONLY = 'DAMAGE_ONLY',
+}

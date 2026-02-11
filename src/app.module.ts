@@ -11,6 +11,7 @@ import { winstonConfig } from './common/logger/winston.config';
 import { AuditLogModule } from './audit-log/audit-log.module';
 import { AuditLogInterceptor } from './common/interceptor/audit-log.interceptor';
 import { InvoiceModule } from './invoice/invoice.module';
+import { InventoryModule } from './inventory/inventory.module';
 
 @Module({
   imports: [
@@ -22,6 +23,7 @@ import { InvoiceModule } from './invoice/invoice.module';
     MongoDbModule,
     AuditLogModule,
     InvoiceModule,
+    InventoryModule,
   ],
   controllers: [AppController],
   providers: [AppService, AuditLogInterceptor],
