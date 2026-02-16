@@ -148,10 +148,12 @@ export class InventoryService {
   ): Promise<PaginatedResponse<Inventory> | Inventory[]> {
     const filter: Record<string, unknown> = {};
     if (filters.invoiceId) {
-      filter.invoiceId = validateObjectId(filters.invoiceId, 'Invoice ID');
+      const validatedId = validateObjectId(filters.invoiceId, 'Invoice ID');
+      filter.invoiceId = new Types.ObjectId(validatedId);
     }
     if (filters.vechileId) {
-      filter.vechileId = validateObjectId(filters.vechileId, 'Vehicle ID');
+      const validatedId = validateObjectId(filters.vechileId, 'Vehicle ID');
+      filter.vechileId = new Types.ObjectId(validatedId);
     }
     if (filters.status) {
       filter.status = filters.status;

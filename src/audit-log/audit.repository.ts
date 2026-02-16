@@ -36,14 +36,17 @@ export class AuditRepository {
   }
 
   async findByActorId(actorId: string): Promise<AuditLogDocument[]> {
-    return this.auditLogModel.find({ actorId }).sort({ createdAt: -1 }).exec();
+    return this.auditLogModel
+      .find({ actorId: this.normalizeId(actorId) })
+      .sort({ createdAt: -1 })
+      .exec();
   }
 
   async findByOrganizationId(
     organizationId: string,
   ): Promise<AuditLogDocument[]> {
     return this.auditLogModel
-      .find({ organizationId })
+      .find({ organizationId: this.normalizeId(organizationId) })
       .sort({ createdAt: -1 })
       .exec();
   }
@@ -58,7 +61,7 @@ export class AuditRepository {
   ): Promise<AuditLogDocument[]> {
     const query: Record<string, unknown> = { resource };
     if (resourceId) {
-      query.resourceId = resourceId;
+      query.resourceId = this.normalizeId(resourceId);
     }
     return this.auditLogModel.find(query).sort({ createdAt: -1 }).exec();
   }
@@ -73,10 +76,10 @@ export class AuditRepository {
     const query: Record<string, unknown> = {};
 
     if (filter.actorId) {
-      query.actorId = filter.actorId;
+      query.actorId = this.normalizeId(filter.actorId);
     }
     if (filter.organizationId) {
-      query.organizationId = filter.organizationId;
+      query.organizationId = this.normalizeId(filter.organizationId);
     }
     if (filter.action) {
       query.action = filter.action;
@@ -85,7 +88,7 @@ export class AuditRepository {
       query.resource = filter.resource;
     }
     if (filter.resourceId) {
-      query.resourceId = filter.resourceId;
+      query.resourceId = this.normalizeId(filter.resourceId);
     }
     if (filter.status) {
       query.status = filter.status;
@@ -113,10 +116,10 @@ export class AuditRepository {
     const query: Record<string, unknown> = {};
 
     if (filter.actorId) {
-      query.actorId = filter.actorId;
+      query.actorId = this.normalizeId(filter.actorId);
     }
     if (filter.organizationId) {
-      query.organizationId = filter.organizationId;
+      query.organizationId = this.normalizeId(filter.organizationId);
     }
     if (filter.action) {
       query.action = filter.action;
@@ -125,7 +128,7 @@ export class AuditRepository {
       query.resource = filter.resource;
     }
     if (filter.resourceId) {
-      query.resourceId = filter.resourceId;
+      query.resourceId = this.normalizeId(filter.resourceId);
     }
     if (filter.status) {
       query.status = filter.status;
@@ -172,10 +175,10 @@ export class AuditRepository {
     const query: Record<string, unknown> = {};
 
     if (filter.actorId) {
-      query.actorId = filter.actorId;
+      query.actorId = this.normalizeId(filter.actorId);
     }
     if (filter.organizationId) {
-      query.organizationId = filter.organizationId;
+      query.organizationId = this.normalizeId(filter.organizationId);
     }
     if (filter.action) {
       query.action = filter.action;
@@ -184,7 +187,7 @@ export class AuditRepository {
       query.resource = filter.resource;
     }
     if (filter.resourceId) {
-      query.resourceId = filter.resourceId;
+      query.resourceId = this.normalizeId(filter.resourceId);
     }
     if (filter.status) {
       query.status = filter.status;
@@ -207,5 +210,15 @@ export class AuditRepository {
       expireAt: { $lt: new Date() },
     });
     return result.deletedCount;
+  }
+
+  private normalizeId(value?: string | Types.ObjectId) {
+    if (!value) {
+      return value;
+    }
+    if (typeof value === 'string' && Types.ObjectId.isValid(value)) {
+      return new Types.ObjectId(value);
+    }
+    return value;
   }
 }
