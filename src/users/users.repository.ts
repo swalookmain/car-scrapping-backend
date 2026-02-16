@@ -1,7 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { User, UserDocument } from './users.schema';
-import { Model } from 'mongoose';
+import { Model, Types } from 'mongoose';
 import { Role } from 'src/common/enum/role.enum';
 
 @Injectable()
@@ -53,7 +53,7 @@ export class UsersRepository {
 
   async findAdminByOrganization(organizationId: string) {
     return this.userModel.findOne({
-      organizationId: organizationId,
+      organizationId: new Types.ObjectId(organizationId),
       role: Role.ADMIN,
     });
   }
@@ -67,7 +67,7 @@ export class UsersRepository {
 
   async findAllStaffByOrganization(organizationId: string) {
     return this.userModel.find({
-      organizationId: organizationId,
+      organizationId: new Types.ObjectId(organizationId),
       role: Role.STAFF,
     });
   }

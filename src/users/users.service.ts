@@ -19,6 +19,7 @@ import {
 } from 'src/common/utils/security.util';
 import { Role } from 'src/common/enum/role.enum';
 import { AuthenticatedUser } from 'src/common/interface/authenticated-user.interface';
+import { Types } from 'mongoose';
 
 @Injectable()
 export class UsersService {
@@ -225,7 +226,7 @@ export class UsersService {
         organizationId,
         'Organization ID',
       );
-      filter.organizationId = validatedOrgId;
+      filter.organizationId = new Types.ObjectId(validatedOrgId);
     }
 
     if (page !== undefined && limit !== undefined) {
@@ -327,10 +328,10 @@ export class UsersService {
     if (page !== undefined && limit !== undefined) {
       const { page: safePage, limit: safeLimit } = getPagination(page, limit);
       const { data, total } = await this.userRepo.findPaginated(
-        { organizationId: validatedOrgId, role: Role.STAFF } as Record<
-          string,
-          any
-        >,
+        {
+          organizationId: new Types.ObjectId(validatedOrgId),
+          role: Role.STAFF,
+        } as Record<string, any>,
         safePage,
         safeLimit,
       );

@@ -1,6 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
-import { Model } from 'mongoose';
+import { Model, Types } from 'mongoose';
 import { Invoice, InvoiceDocument } from './invoice.schema';
 import {
   VechileInvoice,
@@ -35,6 +35,9 @@ export class InvoiceRepository {
     page: number,
     limit: number,
   ) {
+    console.log('filter', filter);
+    console.log('page', page);
+    console.log('limit', limit);
     const skip = (page - 1) * limit;
     const [data, total] = await Promise.all([
       this.invoiceModel.find(filter).sort({ createdAt: -1 }).skip(skip).limit(limit),
@@ -101,7 +104,10 @@ export class InvoiceRepository {
 
   async findPurchaseDocumentsByInvoice(invoiceId: string, orgId: string) {
     return this.purchaseDocumentModel
-      .find({ invoiceId, organizationId: orgId })
+      .find({
+        invoiceId: new Types.ObjectId(invoiceId),
+        organizationId: new Types.ObjectId(orgId),
+      })
       .sort({ createdAt: -1 });
   }
 

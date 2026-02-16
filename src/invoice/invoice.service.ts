@@ -290,13 +290,17 @@ export class InvoiceService {
     {
       try {
         const orgId = this.getOrgId(authenticatedUser);
+        console.log('orgId', orgId);
         const { page: safePage, limit: safeLimit } = getPagination(page, limit);
         const { data, total } = await this.invoiceRepository.findInvoices(
-          { organizationId: orgId },
+          { organizationId: new Types.ObjectId(orgId) },
           safePage,
           safeLimit,
         );
+        console.log('data', data);
+        console.log('total', total);
         const totalPages = Math.ceil(total / safeLimit);
+        console.log('totalPages', totalPages);
 
         return {
           data,
@@ -328,7 +332,7 @@ export class InvoiceService {
         const orgId = this.getOrgId(authenticatedUser);
         const { page: safePage, limit: safeLimit } = getPagination(page, limit);
         const { data, total } = await this.invoiceRepository.findVechileInvoices(
-            { organizationId: orgId },
+            { organizationId: new Types.ObjectId(orgId) },
             safePage,
             safeLimit,
           );

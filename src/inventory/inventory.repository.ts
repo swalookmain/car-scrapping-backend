@@ -1,6 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
-import { Model } from 'mongoose';
+import { Model, Types } from 'mongoose';
 import { Inventory, InventoryDocument } from './inventory.schema';
 
 @Injectable()
@@ -19,11 +19,15 @@ export class InventoryRepository {
   }
 
   async findByVehicleId(vechileId: string) {
-    return this.inventoryModel.find({ vechileId });
+    return this.inventoryModel.find({
+      vechileId: new Types.ObjectId(vechileId),
+    });
   }
 
   async existsByVehicleId(vechileId: string) {
-    return this.inventoryModel.exists({ vechileId });
+    return this.inventoryModel.exists({
+      vechileId: new Types.ObjectId(vechileId),
+    });
   }
 
   async findPaginated(filter: Record<string, unknown>, page: number, limit: number) {
