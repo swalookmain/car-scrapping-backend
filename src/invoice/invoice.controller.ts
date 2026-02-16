@@ -91,6 +91,12 @@ export class InvoiceController {
     type: Number,
     description: 'Items per page (default: 10, max: 100)',
   })
+  @ApiQuery({
+    name: 'invoiceId',
+    required: false,
+    type: String,
+    description: 'Filter by invoice ID',
+  })
   @ApiResponse({ status: 200, description: 'Invoices retrieved successfully' })
   getInvoices(
     @Query() query: PaginationQueryDto,
@@ -123,11 +129,12 @@ export class InvoiceController {
     description: 'Vechile invoices retrieved successfully',
   })
   getVechileInvoices(
-    @Query() query: PaginationQueryDto,
+    @Query() query: PaginationQueryDto & { invoiceId?: string },
     @GetUser() authenticatedUser: AuthenticatedUser,
   ) {
     return this.invoiceService.getVechileInvoices(
       authenticatedUser,
+      query.invoiceId,
       query.page,
       query.limit,
     );

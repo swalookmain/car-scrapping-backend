@@ -6,7 +6,7 @@ import { OrganizationsService } from 'src/organizations/organizations.service';
 import { WINSTON_MODULE_NEST_PROVIDER } from 'nest-winston';
 import { Types } from 'mongoose';
 import type { LoggerService } from '@nestjs/common';
-import { sanitizeObject } from 'src/common/utils/security.util';
+import { sanitizeObject, validateObjectId } from 'src/common/utils/security.util';
 import { AuthenticatedUser } from 'src/common/interface/authenticated-user.interface';
 import { CreateVechileInvoiceDto } from './dto/create-vechile-invoice.dto';
 import { InvoiceStatus } from 'src/common/enum/invoiceStatus.enum';
@@ -324,15 +324,24 @@ export class InvoiceService {
     }
     async getVechileInvoices(
       authenticatedUser: AuthenticatedUser,
+      invoiceId?: string,
       page = 1,
       limit = 10,
     ): Promise<PaginatedResponse<any>>
     {
       try {
         const orgId = this.getOrgId(authenticatedUser);
+        const filter: Record<string, unknown> = {
+          organizationId: new Types.ObjectId(orgId),
+        };
+        if (invoiceId) {
+          filter.invoiceId = new Types.ObjectId(
+            validateObjectId(invoiceId, 'Invoice ID'),
+          );
+        }
         const { page: safePage, limit: safeLimit } = getPagination(page, limit);
         const { data, total } = await this.invoiceRepository.findVechileInvoices(
-            { organizationId: new Types.ObjectId(orgId) },
+            filter,
             safePage,
             safeLimit,
           );
