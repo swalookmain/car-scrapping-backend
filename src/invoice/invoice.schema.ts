@@ -56,6 +56,9 @@ export class Invoice extends Document {
   @Prop({ type: Types.ObjectId, ref: 'User' })
   deletedBy?: Types.ObjectId;
 
+  @Prop({ type: Boolean, default: false })
+  isDeleted?: boolean;
+
   @Prop({ type: Date })
   deletedAt?: Date;
 }

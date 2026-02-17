@@ -250,7 +250,7 @@ export class InvoiceService {
     {
       try {
         const invoice = await this.invoiceRepository.getInvoiceById(invoiceId);
-        if(!invoice) {
+        if(!invoice || invoice.isDeleted) {
           throw new NotFoundException('Invoice not found');
         }
         return invoice;
@@ -293,7 +293,10 @@ export class InvoiceService {
         console.log('orgId', orgId);
         const { page: safePage, limit: safeLimit } = getPagination(page, limit);
         const { data, total } = await this.invoiceRepository.findInvoices(
-          { organizationId: new Types.ObjectId(orgId) },
+          {
+            organizationId: new Types.ObjectId(orgId),
+            isDeleted: { $ne: true },
+          },
           safePage,
           safeLimit,
         );
@@ -391,6 +394,7 @@ export class InvoiceService {
         const updatedInvoice = await this.invoiceRepository.updateInvoice(
           invoiceId,
           {
+            isDeleted: true,
             deletedAt: new Date(),
             deletedBy: new Types.ObjectId(authenticatedUser.userId),
           },

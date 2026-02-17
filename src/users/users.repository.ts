@@ -74,6 +74,10 @@ export class UsersRepository {
 
   async findPaginated(filter: Partial<User>, page: number, limit: number) {
     const skip = (page - 1) * limit;
+    console.log('filter', filter);
+    console.log('page', page);
+    console.log('limit', limit);
+    console.log('skip', skip);
     const [data, total] = await Promise.all([
       this.userModel
         .find(filter)

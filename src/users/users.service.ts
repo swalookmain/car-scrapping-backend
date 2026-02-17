@@ -324,17 +324,21 @@ export class UsersService {
     limit?: number,
   ): Promise<PaginatedResponse<any> | any[]> {
     const validatedOrgId = validateObjectId(organizationId, 'Organization ID');
+    console.log('validatedOrgId', validatedOrgId);
 
     if (page !== undefined && limit !== undefined) {
       const { page: safePage, limit: safeLimit } = getPagination(page, limit);
       const { data, total } = await this.userRepo.findPaginated(
         {
-          organizationId: new Types.ObjectId(validatedOrgId),
+          organizationId: {
+            $in: [new Types.ObjectId(validatedOrgId), validatedOrgId],
+          },
           role: Role.STAFF,
         } as Record<string, any>,
         safePage,
         safeLimit,
       );
+      console.log('data', data);
       const totalPages = Math.ceil(total / safeLimit);
 
       const sanitizedData = data.map((user) => {
