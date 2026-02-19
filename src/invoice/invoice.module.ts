@@ -1,4 +1,4 @@
-import { Module } from '@nestjs/common';
+import { forwardRef, Module } from '@nestjs/common';
 import { MongooseModule } from '@nestjs/mongoose';
 import { InvoiceController } from './invoice.controller';
 import { InvoiceRepository } from './invoice.repository';
@@ -25,6 +25,7 @@ import { OrganizationsModule } from 'src/organizations/organizations.module';
 import { AuditLogModule } from 'src/audit-log/audit-log.module';
 import { StorageService } from 'src/common/services/storage.service';
 import { SellerType } from 'src/common/enum/sellerType.enum';
+import { VehicleComplianceModule } from 'src/vehicle-compliance/vehicle-compliance.module';
 
 @Module({
   imports: [
@@ -55,7 +56,7 @@ import { SellerType } from 'src/common/enum/sellerType.enum';
     ]),
     OrganizationsModule,
     AuditLogModule,
-    
+    forwardRef(() => VehicleComplianceModule),
   ],
   controllers: [InvoiceController],
   providers: [InvoiceService, InvoiceRepository, StorageService],

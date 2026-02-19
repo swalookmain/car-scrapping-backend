@@ -17,6 +17,8 @@ import { getPagination } from 'src/common/utils/pagination.util';
 import { StorageService, UploadFile } from 'src/common/services/storage.service';
 import { UploadPurchaseDocumentDto } from './dto/upload-purchase-document.dto';
 import { SellerType } from 'src/common/enum/sellerType.enum';
+import { VechicleStatus } from 'src/common/enum/vechicleStatus.enum';
+import { VehicleComplianceService } from 'src/vehicle-compliance/vehicle-compliance.service';
 
 
 @Injectable()
@@ -24,6 +26,7 @@ export class InvoiceService {
     constructor(
       private readonly invoiceRepository: InvoiceRepository,
       private readonly organizationsService: OrganizationsService,
+      private readonly vehicleComplianceService: VehicleComplianceService,
       private readonly storageService: StorageService,
       @Inject(WINSTON_MODULE_NEST_PROVIDER)
       private readonly logger: LoggerService,
@@ -212,6 +215,17 @@ export class InvoiceService {
         if (parentInvoice?.status === InvoiceStatus.CONFIRMED) {
           throw new BadRequestException('Confirmed invoices cannot be updated');
         }
+        if (sanitizedData.vechicleStatus === VechicleStatus.SOLD_OUT) {
+          const hasGeneratedCod =
+            await this.vehicleComplianceService.hasGeneratedCodForVehicle(
+              vechileInvoiceId,
+            );
+          if (!hasGeneratedCod) {
+            throw new BadRequestException(
+              'Vehicle cannot be marked SOLD_OUT before COD is generated',
+            );
+          }
+        }
         const { invoiceId, vehicle_purchase_date, model, ...restData } =
           sanitizedData as Record<string, unknown>;
         const normalizedData = {
@@ -236,7 +250,7 @@ export class InvoiceService {
         return updatedVechileInvoice;
       }
       catch (error) {
-        if(error instanceof NotFoundException) {
+        if(error instanceof NotFoundException || error instanceof BadRequestException) {
           throw error;
         }
         const errorMessage = error instanceof Error ? error.message : 'Unknown error';
@@ -282,6 +296,7 @@ export class InvoiceService {
         throw new BadRequestException('Failed to get vechile invoice');
       }
     }
+
     async getInvoices(
       authenticatedUser: AuthenticatedUser,
       page = 1,
