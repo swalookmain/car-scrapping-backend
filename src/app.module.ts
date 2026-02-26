@@ -12,7 +12,6 @@ import { AuditLogModule } from './audit-log/audit-log.module';
 import { AuditLogInterceptor } from './common/interceptor/audit-log.interceptor';
 import { InvoiceModule } from './invoice/invoice.module';
 import { InventoryModule } from './inventory/inventory.module';
-import { VehicleComplianceModule } from './vehicle-compliance/vehicle-compliance.module';
 
 @Module({
   imports: [
@@ -25,7 +24,6 @@ import { VehicleComplianceModule } from './vehicle-compliance/vehicle-compliance
     AuditLogModule,
     InvoiceModule,
     InventoryModule,
-    VehicleComplianceModule,
   ],
   controllers: [AppController],
   providers: [AppService, AuditLogInterceptor],
