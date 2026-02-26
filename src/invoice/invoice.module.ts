@@ -2,6 +2,8 @@ import { forwardRef, Module } from '@nestjs/common';
 import { MongooseModule } from '@nestjs/mongoose';
 import { InvoiceController } from './invoice.controller';
 import { InvoiceRepository } from './invoice.repository';
+import { VehicleInvoiceRepository } from './vehicle-invoice.repository';
+import { PurchaseDocumentRepository } from './purchase-document.repository';
 import { InvoiceService } from './invoice.service';
 import { Invoice, InvoiceSchema } from './invoice.schema';
 import { VechileInvoice, VechileInvoiceSchema } from './vechile-invoice.schema';
@@ -59,7 +61,18 @@ import { VehicleComplianceModule } from 'src/vehicle-compliance/vehicle-complian
     forwardRef(() => VehicleComplianceModule),
   ],
   controllers: [InvoiceController],
-  providers: [InvoiceService, InvoiceRepository, StorageService],
-  exports: [InvoiceService, InvoiceRepository],
+  providers: [
+    InvoiceService,
+    InvoiceRepository,
+    VehicleInvoiceRepository,
+    PurchaseDocumentRepository,
+    StorageService,
+  ],
+  exports: [
+    InvoiceService,
+    InvoiceRepository,
+    VehicleInvoiceRepository,
+    PurchaseDocumentRepository,
+  ],
 })
 export class InvoiceModule {}

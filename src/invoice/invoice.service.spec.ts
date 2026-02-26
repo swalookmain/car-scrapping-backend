@@ -1,6 +1,8 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { InvoiceService } from './invoice.service';
 import { InvoiceRepository } from './invoice.repository';
+import { VehicleInvoiceRepository } from './vehicle-invoice.repository';
+import { PurchaseDocumentRepository } from './purchase-document.repository';
 import { OrganizationsService } from 'src/organizations/organizations.service';
 import { StorageService } from 'src/common/services/storage.service';
 import { WINSTON_MODULE_NEST_PROVIDER } from 'nest-winston';
@@ -15,6 +17,14 @@ describe('InvoiceService', () => {
         InvoiceService,
         {
           provide: InvoiceRepository,
+          useValue: {},
+        },
+        {
+          provide: VehicleInvoiceRepository,
+          useValue: {},
+        },
+        {
+          provide: PurchaseDocumentRepository,
           useValue: {},
         },
         {

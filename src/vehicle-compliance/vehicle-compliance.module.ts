@@ -9,6 +9,7 @@ import { VehicleComplianceService } from './vehicle-compliance.service';
 import { VehicleComplianceController } from './vehicle-compliance.controller';
 import { VehicleComplianceRepository } from './vehicle-compliance.repository';
 import { InvoiceModule } from 'src/invoice/invoice.module';
+import { AuditLogModule } from 'src/audit-log/audit-log.module';
 
 @Module({
   imports: [
@@ -16,6 +17,7 @@ import { InvoiceModule } from 'src/invoice/invoice.module';
       { name: VehicleCodRecord.name, schema: VehicleCodRecordSchema },
     ]),
     OrganizationsModule,
+    AuditLogModule,
     forwardRef(() => InvoiceModule),
   ],
   controllers: [VehicleComplianceController],

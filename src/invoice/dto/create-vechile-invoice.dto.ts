@@ -67,6 +67,12 @@ export class CreateVechileInvoiceDto {
   @IsDateString()
   vehicle_purchase_date: string;
 
+  @ApiProperty({
+    description: 'RTO district/branch (captured at vehicle purchase)',
+  })
+  @IsString()
+  rto_district_branch: string;
+
   @ApiPropertyOptional({ enum: VechicleStatus, default: VechicleStatus.PURCHASED })
   @IsEnum(VechicleStatus)
   @IsOptional()
