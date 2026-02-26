@@ -292,7 +292,7 @@ export class UsersService {
       );
     }
     const sanitizedData = sanitizeObject(updateData);
-    const user = await this.userRepo.update(validatedId, sanitizedData);
+    const user = await this.userRepo.updateById(validatedId, sanitizedData);
     if (!user) {
       throw new NotFoundException('User not found');
     }
@@ -303,7 +303,7 @@ export class UsersService {
   }
   async remove(id: string) {
     const validatedId = validateObjectId(id, 'User ID');
-    const user = await this.userRepo.delete(validatedId);
+    const user = await this.userRepo.deleteById(validatedId);
     if (!user) {
       throw new NotFoundException('User not found');
     }

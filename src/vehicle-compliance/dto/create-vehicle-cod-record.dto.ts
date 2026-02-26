@@ -41,6 +41,21 @@ export class CreateVehicleCodRecordDto {
   @IsDateString()
   codIssueDate?: string;
 
+  @ApiPropertyOptional({ description: 'COD certificate document URL when generated' })
+  @IsString()
+  @IsOptional()
+  codDocumentUrl?: string;
+
+  @ApiPropertyOptional({ description: 'Whether CVS certificate is generated' })
+  @IsBoolean()
+  @IsOptional()
+  cvsGenerated?: boolean;
+
+  @ApiPropertyOptional({ description: 'CVS certificate document URL when generated' })
+  @IsString()
+  @IsOptional()
+  cvsDocumentUrl?: string;
+
   @ApiPropertyOptional({ description: 'RTO office name' })
   @IsString()
   @IsOptional()
@@ -55,9 +70,4 @@ export class CreateVehicleCodRecordDto {
   @IsString()
   @IsOptional()
   remarks?: string;
-
-  @ApiPropertyOptional({ description: 'Stored COD document URL' })
-  @IsString()
-  @IsOptional()
-  codDocumentUrl?: string;
 }

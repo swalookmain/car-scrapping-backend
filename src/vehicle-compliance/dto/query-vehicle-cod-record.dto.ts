@@ -27,6 +27,14 @@ export class QueryVehicleCodRecordDto extends PaginationQueryDto {
   @IsOptional()
   codGenerated?: string;
 
+  @ApiPropertyOptional({
+    description: 'Filter by CVS generated status',
+    enum: ['true', 'false'],
+  })
+  @IsBooleanString()
+  @IsOptional()
+  cvsGenerated?: string;
+
   @ApiPropertyOptional({ enum: RtoStatus, description: 'Filter by RTO status' })
   @IsEnum(RtoStatus)
   @IsOptional()

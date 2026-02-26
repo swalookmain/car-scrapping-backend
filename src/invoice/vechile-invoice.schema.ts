@@ -57,6 +57,9 @@ export class VechileInvoice extends Document {
     default: VechicleStatus.PURCHASED,
   })
   vechicleStatus: VechicleStatus;
+
+  @Prop({ type: String, required: true })
+  rto_district_branch: string;
 }
 export type VechileInvoiceDocument = VechileInvoice & Document;
 export const VechileInvoiceSchema = SchemaFactory.createForClass(VechileInvoice);

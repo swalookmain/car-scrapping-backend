@@ -73,7 +73,7 @@ export class OrganizationsService {
   async update(id: string, updateData: Partial<any>) {
     const validatedId = validateObjectId(id, 'Organization ID');
     const sanitizedData = sanitizeObject(updateData);
-    const organization = await this.organizationRepo.update(
+    const organization = await this.organizationRepo.updateById(
       validatedId,
       sanitizedData,
     );
@@ -85,7 +85,7 @@ export class OrganizationsService {
 
   async remove(id: string) {
     const validatedId = validateObjectId(id, 'Organization ID');
-    const organization = await this.organizationRepo.delete(validatedId);
+    const organization = await this.organizationRepo.deleteById(validatedId);
     if (!organization) {
       throw new NotFoundException('Organization not found');
     }

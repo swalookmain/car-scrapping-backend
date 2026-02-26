@@ -5,34 +5,20 @@ import {
   VehicleCodRecord,
   VehicleCodRecordDocument,
 } from './vehicle-cod-record.schema';
+import { BaseRepository } from 'src/common/repository/base.repository';
 
 @Injectable()
-export class VehicleComplianceRepository {
+export class VehicleComplianceRepository extends BaseRepository<VehicleCodRecordDocument> {
   constructor(
     @InjectModel(VehicleCodRecord.name)
     private readonly vehicleCodRecordModel: Model<VehicleCodRecordDocument>,
-  ) {}
-
-  async createVehicleCodRecord(vehicleCodData: Partial<VehicleCodRecord>) {
-    return this.vehicleCodRecordModel.create(vehicleCodData);
-  }
-
-  async getVehicleCodRecordById(id: string) {
-    return this.vehicleCodRecordModel.findById(id);
+  ) {
+    super(vehicleCodRecordModel);
   }
 
   async getVehicleCodRecordByVehicleId(vehicleId: string) {
     return this.vehicleCodRecordModel.findOne({
       vehicleId: new Types.ObjectId(vehicleId),
-    });
-  }
-
-  async updateVehicleCodRecord(
-    id: string,
-    updateData: Partial<VehicleCodRecord>,
-  ) {
-    return this.vehicleCodRecordModel.findByIdAndUpdate(id, updateData, {
-      new: true,
     });
   }
 
@@ -43,22 +29,4 @@ export class VehicleComplianceRepository {
     });
   }
 
-  async findVehicleCodRecords(
-    filter: Record<string, unknown>,
-    page: number,
-    limit: number,
-  ): Promise<{ data: Array<Record<string, unknown>>; total: number }> {
-    const skip = (page - 1) * limit;
-    const [data, total]: [Array<Record<string, unknown>>, number] =
-      await Promise.all([
-        this.vehicleCodRecordModel
-          .find(filter)
-          .sort({ createdAt: -1 })
-          .skip(skip)
-          .limit(limit)
-          .lean<Array<Record<string, unknown>>>(),
-        this.vehicleCodRecordModel.countDocuments(filter),
-      ]);
-    return { data, total };
-  }
 }

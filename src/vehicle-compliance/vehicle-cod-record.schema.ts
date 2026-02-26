@@ -21,11 +21,26 @@ export class VehicleCodRecord extends Document {
   @Prop({ type: Boolean, default: false, required: true })
   codGenerated: boolean;
 
+  @Prop({ type: Date })
+  codGeneratedAt?: Date;
+
+  @Prop({ type: String })
+  codDocumentUrl?: string;
+
   @Prop({ type: String })
   codInwardNumber?: string;
 
   @Prop({ type: Date })
   codIssueDate?: Date;
+
+  @Prop({ type: Boolean, default: false, required: true })
+  cvsGenerated: boolean;
+
+  @Prop({ type: Date })
+  cvsGeneratedAt?: Date;
+
+  @Prop({ type: String })
+  cvsDocumentUrl?: string;
 
   @Prop({ type: String })
   rtoOffice?: string;
@@ -35,9 +50,6 @@ export class VehicleCodRecord extends Document {
 
   @Prop({ type: String })
   remarks?: string;
-
-  @Prop({ type: String, default: null })
-  codDocumentUrl?: string | null;
 }
 
 export type VehicleCodRecordDocument = VehicleCodRecord & Document;

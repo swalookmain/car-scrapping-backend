@@ -2,6 +2,8 @@ import { BadRequestException, Inject, Injectable, NotFoundException } from '@nes
 import { CreateInvoiceDto } from './dto/create-invoice.dto';
 import { UpdateInvoiceDto } from './dto/update-invoice.dto';
 import { InvoiceRepository } from './invoice.repository';
+import { VehicleInvoiceRepository } from './vehicle-invoice.repository';
+import { PurchaseDocumentRepository } from './purchase-document.repository';
 import { OrganizationsService } from 'src/organizations/organizations.service';
 import { WINSTON_MODULE_NEST_PROVIDER } from 'nest-winston';
 import { Types } from 'mongoose';
@@ -17,7 +19,6 @@ import { getPagination } from 'src/common/utils/pagination.util';
 import { StorageService, UploadFile } from 'src/common/services/storage.service';
 import { UploadPurchaseDocumentDto } from './dto/upload-purchase-document.dto';
 import { SellerType } from 'src/common/enum/sellerType.enum';
-import { VechicleStatus } from 'src/common/enum/vechicleStatus.enum';
 import { VehicleComplianceService } from 'src/vehicle-compliance/vehicle-compliance.service';
 
 
@@ -25,6 +26,8 @@ import { VehicleComplianceService } from 'src/vehicle-compliance/vehicle-complia
 export class InvoiceService {
     constructor(
       private readonly invoiceRepository: InvoiceRepository,
+      private readonly vehicleInvoiceRepository: VehicleInvoiceRepository,
+      private readonly purchaseDocumentRepository: PurchaseDocumentRepository,
       private readonly organizationsService: OrganizationsService,
       private readonly vehicleComplianceService: VehicleComplianceService,
       private readonly storageService: StorageService,
@@ -57,7 +60,7 @@ export class InvoiceService {
             : {}),
           ...(auctionDateValue ? { auctionDate: new Date(auctionDateValue) } : {}),
         };
-        const invoice = await this.invoiceRepository.createInvoice(invoicePayload);
+        const invoice = await this.invoiceRepository.create(invoicePayload);
         return invoice;
       } catch (error) {
         if(error instanceof NotFoundException || error instanceof BadRequestException) {
@@ -81,7 +84,7 @@ export class InvoiceService {
         if(!sanitizedData.invoiceId) {
           throw new BadRequestException('Invoice ID is required');
         }
-        const invoice = await this.invoiceRepository.getInvoiceById(sanitizedData.invoiceId);
+        const invoice = await this.invoiceRepository.findById(sanitizedData.invoiceId);
         if(!invoice) {
           throw new NotFoundException('Invoice not found');
         }
@@ -91,7 +94,7 @@ export class InvoiceService {
         }
 
         const registerationNumberExist =
-          await this.invoiceRepository.getVechileInvoiceByRegistrationNumber(
+          await this.vehicleInvoiceRepository.findOneByRegistrationNumber(
             sanitizedData.registration_number as string,
           );
         if(registerationNumberExist) {
@@ -106,7 +109,7 @@ export class InvoiceService {
           typeof normalizedData.vehicle_purchase_date === 'string'
             ? normalizedData.vehicle_purchase_date
             : undefined;
-        const vechileInvoice = await this.invoiceRepository.createVechileInvoice(
+        const vechileInvoice = await this.vehicleInvoiceRepository.create(
           {
             ...normalizedData,
             invoiceId: new Types.ObjectId(sanitizedData.invoiceId),
@@ -139,7 +142,7 @@ export class InvoiceService {
         if(!organization) {
           throw new NotFoundException('Organization not found');
         }
-        const invoice = await this.invoiceRepository.getInvoiceById(invoiceId);
+        const invoice = await this.invoiceRepository.findById(invoiceId);
         if(!invoice) {
           throw new NotFoundException('Invoice not found');
         }
@@ -180,7 +183,7 @@ export class InvoiceService {
           };
         }
 
-        const updatedInvoice = await this.invoiceRepository.updateInvoice(
+        const updatedInvoice = await this.invoiceRepository.updateById(
           invoiceId,
           updateData,
         );
@@ -205,26 +208,15 @@ export class InvoiceService {
         if(!organization) {
           throw new NotFoundException('Organization not found');
         }
-        const vechileInvoice = await this.invoiceRepository.getVechileInvoiceById(vechileInvoiceId);
+        const vechileInvoice = await this.vehicleInvoiceRepository.findById(vechileInvoiceId);
         if(!vechileInvoice) {
           throw new NotFoundException('Vechile invoice not found');
         }
-        const parentInvoice = await this.invoiceRepository.getInvoiceById(
+        const parentInvoice = await this.invoiceRepository.findById(
           vechileInvoice.invoiceId.toString(),
         );
         if (parentInvoice?.status === InvoiceStatus.CONFIRMED) {
           throw new BadRequestException('Confirmed invoices cannot be updated');
-        }
-        if (sanitizedData.vechicleStatus === VechicleStatus.SOLD_OUT) {
-          const hasGeneratedCod =
-            await this.vehicleComplianceService.hasGeneratedCodForVehicle(
-              vechileInvoiceId,
-            );
-          if (!hasGeneratedCod) {
-            throw new BadRequestException(
-              'Vehicle cannot be marked SOLD_OUT before COD is generated',
-            );
-          }
         }
         const { invoiceId, vehicle_purchase_date, model, ...restData } =
           sanitizedData as Record<string, unknown>;
@@ -246,7 +238,7 @@ export class InvoiceService {
             ? { vehicle_purchase_date: new Date(vehiclePurchaseDateValue) }
             : {}),
         };
-        const updatedVechileInvoice = await this.invoiceRepository.updateVechileInvoice(vechileInvoiceId, updateData);
+        const updatedVechileInvoice = await this.vehicleInvoiceRepository.updateById(vechileInvoiceId, updateData);
         return updatedVechileInvoice;
       }
       catch (error) {
@@ -263,7 +255,7 @@ export class InvoiceService {
     async getInvoiceById(invoiceId: string)
     {
       try {
-        const invoice = await this.invoiceRepository.getInvoiceById(invoiceId);
+        const invoice = await this.invoiceRepository.findById(invoiceId);
         if(!invoice || invoice.isDeleted) {
           throw new NotFoundException('Invoice not found');
         }
@@ -281,7 +273,7 @@ export class InvoiceService {
     async getVechileInvoiceById(vechileInvoiceId: string)
     {
       try {
-        const vechileInvoice = await this.invoiceRepository.getVechileInvoiceById(vechileInvoiceId);
+        const vechileInvoice = await this.vehicleInvoiceRepository.findById(vechileInvoiceId);
         if(!vechileInvoice) {
           throw new NotFoundException('Vechile invoice not found');
         }
@@ -307,7 +299,7 @@ export class InvoiceService {
         const orgId = this.getOrgId(authenticatedUser);
         console.log('orgId', orgId);
         const { page: safePage, limit: safeLimit } = getPagination(page, limit);
-        const { data, total } = await this.invoiceRepository.findInvoices(
+        const { data, total } = await this.invoiceRepository.findPaginated(
           {
             organizationId: new Types.ObjectId(orgId),
             isDeleted: { $ne: true },
@@ -358,7 +350,7 @@ export class InvoiceService {
           );
         }
         const { page: safePage, limit: safeLimit } = getPagination(page, limit);
-        const { data, total } = await this.invoiceRepository.findVechileInvoices(
+        const { data, total } = await this.vehicleInvoiceRepository.findPaginated(
             filter,
             safePage,
             safeLimit,
@@ -395,18 +387,18 @@ export class InvoiceService {
         if(!organization) {
           throw new NotFoundException('Organization not found');
         }
-        const invoice = await this.invoiceRepository.getInvoiceById(invoiceId);
+        const invoice = await this.invoiceRepository.findById(invoiceId);
         if(!invoice) {
           throw new NotFoundException('Invoice not found');
         }
         if (invoice.status !== InvoiceStatus.CONFIRMED) {
-          const deletedInvoice = await this.invoiceRepository.deleteInvoice(invoiceId);
+          const deletedInvoice = await this.invoiceRepository.deleteById(invoiceId);
           return {
             message: 'Invoice deleted successfully',
             invoice: deletedInvoice,
           };
         }
-        const updatedInvoice = await this.invoiceRepository.updateInvoice(
+        const updatedInvoice = await this.invoiceRepository.updateById(
           invoiceId,
           {
             isDeleted: true,
@@ -438,19 +430,19 @@ export class InvoiceService {
         if(!organization) {
           throw new NotFoundException('Organization not found');
         }
-        const vechileInvoice = await this.invoiceRepository.getVechileInvoiceById(vechileInvoiceId);
+        const vechileInvoice = await this.vehicleInvoiceRepository.findById(vechileInvoiceId);
         if(!vechileInvoice) {
           throw new NotFoundException('Vechile invoice not found');
         }
-        const parentInvoice = await this.invoiceRepository.getInvoiceById(
+        const parentInvoice = await this.invoiceRepository.findById(
           vechileInvoice.invoiceId.toString(),
         );
         if (parentInvoice?.status === InvoiceStatus.CONFIRMED) {
           throw new BadRequestException('Confirmed invoices cannot be updated');
         }
-        await this.invoiceRepository.deleteVechileInvoice(vechileInvoiceId);
+        await this.vehicleInvoiceRepository.deleteById(vechileInvoiceId);
         // need to delete invoice related to this vechile invoice
-        const updatedInvoice = await this.invoiceRepository.updateInvoice(
+        const updatedInvoice = await this.invoiceRepository.updateById(
           vechileInvoice.invoiceId.toString(),
           {
             deletedAt: new Date(),
@@ -489,7 +481,7 @@ export class InvoiceService {
           throw new NotFoundException('Organization not found');
         }
 
-        const invoice = await this.invoiceRepository.getInvoiceById(
+        const invoice = await this.invoiceRepository.findById(
           uploadDto.invoiceId,
         );
         if (!invoice) {
@@ -501,7 +493,7 @@ export class InvoiceService {
 
         if (uploadDto.vechileInvoiceId) {
           const vechileInvoice =
-            await this.invoiceRepository.getVechileInvoiceById(
+            await this.vehicleInvoiceRepository.findById(
               uploadDto.vechileInvoiceId,
             );
           if (!vechileInvoice) {
@@ -565,7 +557,7 @@ export class InvoiceService {
         );
 
         const saved =
-          await this.invoiceRepository.createPurchaseDocuments(uploads);
+          await this.purchaseDocumentRepository.createMany(uploads);
         return { message: 'Documents uploaded', documents: saved };
       } catch (error) {
         if (
@@ -586,7 +578,7 @@ export class InvoiceService {
       authenticatedUser: AuthenticatedUser,
     ) {
       const orgId = this.getOrgId(authenticatedUser);
-      return this.invoiceRepository.findPurchaseDocumentsByInvoice(
+      return this.purchaseDocumentRepository.findByInvoiceAndOrg(
         invoiceId,
         orgId,
       );

@@ -112,7 +112,6 @@ export class AuditRepository {
     page: number,
     limit: number,
   ): Promise<{ data: AuditLogDocument[]; total: number }> {
-    const skip = (page - 1) * limit;
     const query: Record<string, unknown> = {};
 
     if (filter.actorId) {
@@ -144,6 +143,7 @@ export class AuditRepository {
       query.createdAt = dateFilter;
     }
 
+    const skip = (page - 1) * limit;
     const [data, total] = await Promise.all([
       this.auditLogModel
         .find(query)

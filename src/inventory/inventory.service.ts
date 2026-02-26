@@ -14,6 +14,7 @@ import {
 import { UpdateInventoryDto } from './dto/update-inventory.dto';
 import { InventoryRepository } from './inventory.repository';
 import { InvoiceRepository } from 'src/invoice/invoice.repository';
+import { VehicleInvoiceRepository } from 'src/invoice/vehicle-invoice.repository';
 import { Condition } from 'src/common/enum/condition.enum';
 import { Status } from 'src/common/enum/status.enum';
 import { sanitizeObject, validateObjectId } from 'src/common/utils/security.util';
@@ -27,6 +28,7 @@ export class InventoryService {
   constructor(
     private readonly inventoryRepo: InventoryRepository,
     private readonly invoiceRepo: InvoiceRepository,
+    private readonly vehicleInvoiceRepo: VehicleInvoiceRepository,
     @Inject(WINSTON_MODULE_NEST_PROVIDER)
     private readonly logger: LoggerService,
   ) {}
@@ -47,8 +49,8 @@ export class InventoryService {
       }
 
       const [invoice, vechileInvoice, existingParts] = await Promise.all([
-        this.invoiceRepo.getInvoiceById(invoiceId),
-        this.invoiceRepo.getVechileInvoiceById(vechileId),
+        this.invoiceRepo.findById(invoiceId),
+        this.vehicleInvoiceRepo.findById(vechileId),
         this.inventoryRepo.existsByVehicleId(vechileId),
       ]);
 
