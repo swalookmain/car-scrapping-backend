@@ -19,6 +19,7 @@ import { InventoryMovementRepository } from './inventory-movement.repository';
 import { InventoryModule } from 'src/inventory/inventory.module';
 import { VehicleComplianceModule } from 'src/vehicle-compliance/vehicle-compliance.module';
 import { InvoiceModule } from 'src/invoice/invoice.module';
+import { TaxComplianceModule } from 'src/tax-compliance/tax-compliance.module';
 
 @Module({
   imports: [
@@ -31,6 +32,7 @@ import { InvoiceModule } from 'src/invoice/invoice.module';
     InventoryModule,
     VehicleComplianceModule,
     InvoiceModule,
+    TaxComplianceModule,
   ],
   controllers: [SalesDispatchController],
   providers: [

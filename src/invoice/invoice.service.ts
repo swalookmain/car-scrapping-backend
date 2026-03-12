@@ -20,6 +20,11 @@ import { StorageService, UploadFile } from 'src/common/services/storage.service'
 import { UploadPurchaseDocumentDto } from './dto/upload-purchase-document.dto';
 import { SellerType } from 'src/common/enum/sellerType.enum';
 import { VehicleComplianceService } from 'src/vehicle-compliance/vehicle-compliance.service';
+import { TaxEngineService } from 'src/tax-compliance/tax-engine.service';
+import { TaxConfigRepository } from 'src/tax-compliance/tax-config.repository';
+import { GstAuditService } from 'src/tax-compliance/gst-audit.service';
+import { InvoiceType } from 'src/common/enum/invoiceType.enum';
+import { GstAuditEventType } from 'src/common/enum/gstAuditEventType.enum';
 
 
 @Injectable()
@@ -30,6 +35,9 @@ export class InvoiceService {
       private readonly purchaseDocumentRepository: PurchaseDocumentRepository,
       private readonly organizationsService: OrganizationsService,
       private readonly vehicleComplianceService: VehicleComplianceService,
+      private readonly taxEngineService: TaxEngineService,
+      private readonly taxConfigRepository: TaxConfigRepository,
+      private readonly gstAuditService: GstAuditService,
       private readonly storageService: StorageService,
       @Inject(WINSTON_MODULE_NEST_PROVIDER)
       private readonly logger: LoggerService,
@@ -44,6 +52,19 @@ export class InvoiceService {
         if(!organization) {
           throw new NotFoundException('Organization not found');
         }
+        const taxConfig = await this.taxConfigRepository.findByOrganizationId(orgId);
+        if (!taxConfig) {
+          throw new BadRequestException('Tax config not found for organization');
+        }
+        const gstApplicable = sanitizedData.gstApplicable ?? taxConfig.gstEnabled;
+        const taxResult = this.taxEngineService.compute({
+          taxableAmount: sanitizedData.purchaseAmount,
+          gstApplicable,
+          gstRate: sanitizedData.gstRate ?? taxConfig.defaultGstRate,
+          reverseChargeApplicable: sanitizedData.reverseChargeApplicable,
+          orgStateCode: taxConfig.stateCode,
+          placeOfSupplyState: sanitizedData.placeOfSupplyState,
+        });
         const { purchaseDate, auctionDate, ...restData } = sanitizedData;
         const purchaseDateValue =
           typeof purchaseDate === 'string' ? purchaseDate : undefined;
@@ -55,12 +76,47 @@ export class InvoiceService {
           createdBy: new Types.ObjectId(authenticatedUser.userId),
           updatedBy: new Types.ObjectId(authenticatedUser.userId),
           __t: this.getDiscriminatorKeyValue(sanitizedData.sellerType),
+          gstApplicable,
+          gstRate: taxResult.gstRate,
+          gstAmount: taxResult.totalTaxAmount,
+          taxableAmount: taxResult.taxableAmount,
+          cgstAmount: taxResult.cgstAmount,
+          sgstAmount: taxResult.sgstAmount,
+          igstAmount: taxResult.igstAmount,
+          totalTaxAmount: taxResult.totalTaxAmount,
+          isInterstate: taxResult.isInterstate,
           ...(purchaseDateValue
             ? { purchaseDate: new Date(purchaseDateValue) }
             : {}),
           ...(auctionDateValue ? { auctionDate: new Date(auctionDateValue) } : {}),
         };
         const invoice = await this.invoiceRepository.create(invoicePayload);
+        await this.gstAuditService.logEvent({
+          organizationId: orgId,
+          invoiceType: InvoiceType.PURCHASE,
+          invoiceId: invoice._id.toString(),
+          eventType: GstAuditEventType.GST_CALCULATED,
+          metadata: {
+            taxableAmount: taxResult.taxableAmount,
+            cgstAmount: taxResult.cgstAmount,
+            sgstAmount: taxResult.sgstAmount,
+            igstAmount: taxResult.igstAmount,
+            totalTaxAmount: taxResult.totalTaxAmount,
+            reverseChargeApplicable: sanitizedData.reverseChargeApplicable,
+          },
+        });
+        if (sanitizedData.reverseChargeApplicable) {
+          await this.gstAuditService.logEvent({
+            organizationId: orgId,
+            invoiceType: InvoiceType.PURCHASE,
+            invoiceId: invoice._id.toString(),
+            eventType: GstAuditEventType.RCM_APPLIED,
+            metadata: {
+              payableAmount: taxResult.totalAmount,
+              totalTaxAmount: taxResult.totalTaxAmount,
+            },
+          });
+        }
         return invoice;
       } catch (error) {
         if(error instanceof NotFoundException || error instanceof BadRequestException) {
@@ -152,6 +208,27 @@ export class InvoiceService {
         if (sanitizedData.sellerType) {
           this.assertSellerTypeFields(sanitizedData.sellerType, sanitizedData);
         }
+        const taxConfig = await this.taxConfigRepository.findByOrganizationId(orgId);
+        if (!taxConfig) {
+          throw new BadRequestException('Tax config not found for organization');
+        }
+        const taxableAmount =
+          sanitizedData.purchaseAmount ?? invoice.purchaseAmount;
+        const gstApplicable =
+          sanitizedData.gstApplicable ?? invoice.gstApplicable ?? taxConfig.gstEnabled;
+        const reverseChargeApplicable =
+          sanitizedData.reverseChargeApplicable ?? invoice.reverseChargeApplicable;
+        const placeOfSupplyState =
+          sanitizedData.placeOfSupplyState ?? invoice.placeOfSupplyState;
+        const taxResult = this.taxEngineService.compute({
+          taxableAmount,
+          gstApplicable,
+          gstRate:
+            sanitizedData.gstRate ?? invoice.gstRate ?? taxConfig.defaultGstRate,
+          reverseChargeApplicable,
+          orgStateCode: taxConfig.stateCode,
+          placeOfSupplyState,
+        });
         const { purchaseDate, auctionDate, ...restData } = sanitizedData;
         const purchaseDateValue =
           typeof purchaseDate === 'string' ? purchaseDate : undefined;
@@ -164,6 +241,15 @@ export class InvoiceService {
             ? { purchaseDate: new Date(purchaseDateValue) }
             : {}),
           ...(auctionDateValue ? { auctionDate: new Date(auctionDateValue) } : {}),
+          gstApplicable,
+          gstRate: taxResult.gstRate,
+          gstAmount: taxResult.totalTaxAmount,
+          taxableAmount: taxResult.taxableAmount,
+          cgstAmount: taxResult.cgstAmount,
+          sgstAmount: taxResult.sgstAmount,
+          igstAmount: taxResult.igstAmount,
+          totalTaxAmount: taxResult.totalTaxAmount,
+          isInterstate: taxResult.isInterstate,
           updatedBy: new Types.ObjectId(authenticatedUser.userId),
         };
         const updateData: Record<string, unknown> = {
@@ -187,6 +273,32 @@ export class InvoiceService {
           invoiceId,
           updateData,
         );
+        await this.gstAuditService.logEvent({
+          organizationId: orgId,
+          invoiceType: InvoiceType.PURCHASE,
+          invoiceId,
+          eventType: GstAuditEventType.GST_CALCULATED,
+          metadata: {
+            taxableAmount: taxResult.taxableAmount,
+            cgstAmount: taxResult.cgstAmount,
+            sgstAmount: taxResult.sgstAmount,
+            igstAmount: taxResult.igstAmount,
+            totalTaxAmount: taxResult.totalTaxAmount,
+            reverseChargeApplicable,
+          },
+        });
+        if (reverseChargeApplicable) {
+          await this.gstAuditService.logEvent({
+            organizationId: orgId,
+            invoiceType: InvoiceType.PURCHASE,
+            invoiceId,
+            eventType: GstAuditEventType.RCM_APPLIED,
+            metadata: {
+              payableAmount: taxResult.totalAmount,
+              totalTaxAmount: taxResult.totalTaxAmount,
+            },
+          });
+        }
         return updatedInvoice;
       } catch (error) {
         if(error instanceof NotFoundException) {

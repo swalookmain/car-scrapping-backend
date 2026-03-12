@@ -95,6 +95,10 @@ export class CreateInvoiceDto {
   @IsDateString()
   purchaseDate: string;
 
+  @ApiProperty({ description: 'Place of supply state code' })
+  @IsString()
+  placeOfSupplyState: string;
+
   @ApiPropertyOptional({ default: true })
   @IsBoolean()
   @IsOptional()

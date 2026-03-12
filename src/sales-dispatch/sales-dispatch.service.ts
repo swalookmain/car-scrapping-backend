@@ -32,6 +32,11 @@ import type { UpdateBuyerDto } from './dto/update-buyer.dto';
 import type { QueryBuyersDto } from './dto/query-buyers.dto';
 import { InventoryMovementType } from 'src/common/enum/inventoryMovementType.enum';
 import { InventoryReferenceType } from 'src/common/enum/inventoryReferenceType.enum';
+import { TaxEngineService } from 'src/tax-compliance/tax-engine.service';
+import { TaxConfigRepository } from 'src/tax-compliance/tax-config.repository';
+import { GstAuditService } from 'src/tax-compliance/gst-audit.service';
+import { InvoiceType } from 'src/common/enum/invoiceType.enum';
+import { GstAuditEventType } from 'src/common/enum/gstAuditEventType.enum';
 
 type InventoryLike = {
   _id: Types.ObjectId;
@@ -54,6 +59,9 @@ export class SalesDispatchService {
     private readonly inventoryRepository: InventoryRepository,
     private readonly vehicleComplianceRepository: VehicleComplianceRepository,
     private readonly vehicleInvoiceRepository: VehicleInvoiceRepository,
+    private readonly taxEngineService: TaxEngineService,
+    private readonly taxConfigRepository: TaxConfigRepository,
+    private readonly gstAuditService: GstAuditService,
     @Inject(WINSTON_MODULE_NEST_PROVIDER)
     private readonly logger: LoggerService,
   ) {}
@@ -155,22 +163,38 @@ export class SalesDispatchService {
         sanitizedData.items,
       );
       const subtotalAmount = this.getSubtotal(validatedItems);
-      const gstApplicable = sanitizedData.gstApplicable ?? true;
-      const gstRate = gstApplicable ? (sanitizedData.gstRate ?? 0) : 0;
-      const gstAmount = gstApplicable ? (subtotalAmount * gstRate) / 100 : 0;
-      const totalAmount = subtotalAmount + gstAmount;
+      const taxConfig = await this.taxConfigRepository.findByOrganizationId(orgId);
+      if (!taxConfig) {
+        throw new BadRequestException('Tax config not found for organization');
+      }
+      const gstApplicable = sanitizedData.gstApplicable ?? taxConfig.gstEnabled;
+      const taxResult = this.taxEngineService.compute({
+        taxableAmount: subtotalAmount,
+        gstApplicable,
+        gstRate: sanitizedData.gstRate ?? taxConfig.defaultGstRate,
+        reverseChargeApplicable: sanitizedData.reverseChargeApplicable ?? false,
+        orgStateCode: taxConfig.stateCode,
+        placeOfSupplyState: sanitizedData.placeOfSupplyState,
+      });
 
       const invoice = await this.salesInvoiceRepository.create({
         organizationId: new Types.ObjectId(orgId),
         invoiceNumber: sanitizedData.invoiceNumber,
         buyerId: new Types.ObjectId(buyer._id),
         invoiceDate: new Date(sanitizedData.invoiceDate),
+        placeOfSupplyState: sanitizedData.placeOfSupplyState,
         gstApplicable,
-        gstRate,
-        gstAmount,
+        gstRate: taxResult.gstRate,
+        gstAmount: taxResult.totalTaxAmount,
+        taxableAmount: taxResult.taxableAmount,
+        cgstAmount: taxResult.cgstAmount,
+        sgstAmount: taxResult.sgstAmount,
+        igstAmount: taxResult.igstAmount,
+        totalTaxAmount: taxResult.totalTaxAmount,
+        isInterstate: taxResult.isInterstate,
         reverseChargeApplicable: sanitizedData.reverseChargeApplicable ?? false,
         subtotalAmount,
-        totalAmount,
+        totalAmount: taxResult.totalAmount,
         ewayBillNumber: sanitizedData.ewayBillNumber,
         ewayBillDocumentUrl: sanitizedData.ewayBillDocumentUrl,
         status: SalesInvoiceStatus.DRAFT,
@@ -189,6 +213,35 @@ export class SalesDispatchService {
           lineTotal: item.lineTotal,
         })),
       );
+
+      await this.gstAuditService.logEvent({
+        organizationId: orgId,
+        invoiceType: InvoiceType.SALES,
+        invoiceId: invoice._id.toString(),
+        eventType: GstAuditEventType.GST_CALCULATED,
+        metadata: {
+          gstApplicable,
+          reverseChargeApplicable: sanitizedData.reverseChargeApplicable ?? false,
+          taxableAmount: taxResult.taxableAmount,
+          cgstAmount: taxResult.cgstAmount,
+          sgstAmount: taxResult.sgstAmount,
+          igstAmount: taxResult.igstAmount,
+          totalTaxAmount: taxResult.totalTaxAmount,
+          totalAmount: taxResult.totalAmount,
+        },
+      });
+      if (sanitizedData.reverseChargeApplicable) {
+        await this.gstAuditService.logEvent({
+          organizationId: orgId,
+          invoiceType: InvoiceType.SALES,
+          invoiceId: invoice._id.toString(),
+          eventType: GstAuditEventType.RCM_APPLIED,
+          metadata: {
+            totalTaxAmount: taxResult.totalTaxAmount,
+            payableAmount: taxResult.totalAmount,
+          },
+        });
+      }
 
       return this.getSalesInvoiceById(invoice._id.toString(), authenticatedUser);
     } catch (error) {
@@ -285,6 +338,9 @@ export class SalesDispatchService {
     if (sanitizedData.invoiceDate) {
       updatePayload.invoiceDate = new Date(sanitizedData.invoiceDate);
     }
+    if (sanitizedData.placeOfSupplyState) {
+      updatePayload.placeOfSupplyState = sanitizedData.placeOfSupplyState;
+    }
     if (sanitizedData.reverseChargeApplicable !== undefined) {
       updatePayload.reverseChargeApplicable = sanitizedData.reverseChargeApplicable;
     }
@@ -322,27 +378,61 @@ export class SalesDispatchService {
       }));
     }
 
-    const subtotalAmount = this.getSubtotal(
-      lineItemsForTotals,
-    );
+    const subtotalAmount = this.getSubtotal(lineItemsForTotals);
+    const orgId = this.getOrgId(authenticatedUser);
+    const taxConfig = await this.taxConfigRepository.findByOrganizationId(orgId);
+    if (!taxConfig) {
+      throw new BadRequestException('Tax config not found for organization');
+    }
     const gstApplicable =
       sanitizedData.gstApplicable ?? existing.invoice.gstApplicable;
-    const gstRate = gstApplicable
-      ? sanitizedData.gstRate ?? existing.invoice.gstRate ?? 0
-      : 0;
-    const gstAmount = gstApplicable ? (subtotalAmount * gstRate) / 100 : 0;
-    const totalAmount = subtotalAmount + gstAmount;
+    const taxResult = this.taxEngineService.compute({
+      taxableAmount: subtotalAmount,
+      gstApplicable,
+      gstRate:
+        sanitizedData.gstRate ??
+        existing.invoice.gstRate ??
+        taxConfig.defaultGstRate,
+      reverseChargeApplicable:
+        sanitizedData.reverseChargeApplicable ??
+        existing.invoice.reverseChargeApplicable,
+      orgStateCode: taxConfig.stateCode,
+      placeOfSupplyState:
+        sanitizedData.placeOfSupplyState ??
+        existing.invoice.placeOfSupplyState ??
+        taxConfig.stateCode,
+    });
 
     updatePayload.gstApplicable = gstApplicable;
-    updatePayload.gstRate = gstRate;
-    updatePayload.gstAmount = gstAmount;
+    updatePayload.gstRate = taxResult.gstRate;
+    updatePayload.gstAmount = taxResult.totalTaxAmount;
+    updatePayload.taxableAmount = taxResult.taxableAmount;
+    updatePayload.cgstAmount = taxResult.cgstAmount;
+    updatePayload.sgstAmount = taxResult.sgstAmount;
+    updatePayload.igstAmount = taxResult.igstAmount;
+    updatePayload.totalTaxAmount = taxResult.totalTaxAmount;
+    updatePayload.isInterstate = taxResult.isInterstate;
     updatePayload.subtotalAmount = subtotalAmount;
-    updatePayload.totalAmount = totalAmount;
+    updatePayload.totalAmount = taxResult.totalAmount;
 
     await this.salesInvoiceRepository.updateById(
       existing.invoice._id.toString(),
       updatePayload,
     );
+    await this.gstAuditService.logEvent({
+      organizationId: orgId,
+      invoiceType: InvoiceType.SALES,
+      invoiceId: existing.invoice._id.toString(),
+      eventType: GstAuditEventType.GST_CALCULATED,
+      metadata: {
+        taxableAmount: taxResult.taxableAmount,
+        cgstAmount: taxResult.cgstAmount,
+        sgstAmount: taxResult.sgstAmount,
+        igstAmount: taxResult.igstAmount,
+        totalTaxAmount: taxResult.totalTaxAmount,
+        totalAmount: taxResult.totalAmount,
+      },
+    });
     return this.getSalesInvoiceById(existing.invoice._id.toString(), authenticatedUser);
   }
 

@@ -14,6 +14,8 @@ import { InvoiceModule } from './invoice/invoice.module';
 import { InventoryModule } from './inventory/inventory.module';
 import { VehicleComplianceModule } from './vehicle-compliance/vehicle-compliance.module';
 import { SalesDispatchModule } from './sales-dispatch/sales-dispatch.module';
+import { TaxComplianceModule } from './tax-compliance/tax-compliance.module';
+import { DamageAdjustmentsModule } from './damage-adjustments/damage-adjustments.module';
 
 @Module({
   imports: [
@@ -28,6 +30,8 @@ import { SalesDispatchModule } from './sales-dispatch/sales-dispatch.module';
     InventoryModule,
     VehicleComplianceModule,
     SalesDispatchModule,
+    TaxComplianceModule,
+    DamageAdjustmentsModule,
   ],
   controllers: [AppController],
   providers: [AppService, AuditLogInterceptor],

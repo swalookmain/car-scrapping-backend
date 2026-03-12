@@ -16,6 +16,9 @@ export class SalesInvoice extends Document {
   @Prop({ type: Date, required: true })
   invoiceDate: Date;
 
+  @Prop({ type: String, required: true, trim: true })
+  placeOfSupplyState: string;
+
   @Prop({ type: Boolean, default: true, required: true })
   gstApplicable: boolean;
 
@@ -24,6 +27,24 @@ export class SalesInvoice extends Document {
 
   @Prop({ type: Number, default: 0 })
   gstAmount?: number;
+
+  @Prop({ type: Number, required: true, min: 0 })
+  taxableAmount: number;
+
+  @Prop({ type: Number, required: true, min: 0, default: 0 })
+  cgstAmount: number;
+
+  @Prop({ type: Number, required: true, min: 0, default: 0 })
+  sgstAmount: number;
+
+  @Prop({ type: Number, required: true, min: 0, default: 0 })
+  igstAmount: number;
+
+  @Prop({ type: Number, required: true, min: 0, default: 0 })
+  totalTaxAmount: number;
+
+  @Prop({ type: Boolean, required: true, default: false })
+  isInterstate: boolean;
 
   @Prop({ type: Boolean, default: false, required: true })
   reverseChargeApplicable: boolean;

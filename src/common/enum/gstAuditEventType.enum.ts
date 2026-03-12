@@ -1,0 +1,5 @@
+export enum GstAuditEventType {
+  GST_CALCULATED = 'GST_CALCULATED',
+  RCM_APPLIED = 'RCM_APPLIED',
+  EWAY_ADDED = 'EWAY_ADDED',
+}

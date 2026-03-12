@@ -72,6 +72,15 @@ export class Inventory extends Document {
   @Prop({ enum: Status, required: true })
   status: Status;
 
+  @Prop({ type: String, trim: true })
+  damageReason?: string;
+
+  @Prop({ type: Date })
+  damageRecordedAt?: Date;
+
+  @Prop({ type: Types.ObjectId, ref: 'User' })
+  damageRecordedBy?: Types.ObjectId;
+
   @Prop({ type: [InventoryAttachment], default: [] })
   documents?: InventoryAttachment[];
 
