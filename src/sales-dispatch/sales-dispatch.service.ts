@@ -37,6 +37,7 @@ import { TaxConfigRepository } from 'src/tax-compliance/tax-config.repository';
 import { GstAuditService } from 'src/tax-compliance/gst-audit.service';
 import { InvoiceType } from 'src/common/enum/invoiceType.enum';
 import { GstAuditEventType } from 'src/common/enum/gstAuditEventType.enum';
+import { LedgerService } from 'src/accounting/services/ledger.service';
 
 type InventoryLike = {
   _id: Types.ObjectId;
@@ -62,6 +63,7 @@ export class SalesDispatchService {
     private readonly taxEngineService: TaxEngineService,
     private readonly taxConfigRepository: TaxConfigRepository,
     private readonly gstAuditService: GstAuditService,
+    private readonly ledgerService: LedgerService,
     @Inject(WINSTON_MODULE_NEST_PROVIDER)
     private readonly logger: LoggerService,
   ) {}
@@ -516,6 +518,13 @@ export class SalesDispatchService {
       await this.inventoryMovementRepository.createMany(movementPayload);
       await this.salesInvoiceRepository.updateById(existing.invoice._id.toString(), {
         status: SalesInvoiceStatus.CONFIRMED,
+      });
+      await this.ledgerService.postSalesInvoice(orgId, {
+        _id: existing.invoice._id,
+        organizationId: existing.invoice.organizationId,
+        totalAmount: existing.invoice.totalAmount,
+        taxableAmount: existing.invoice.taxableAmount,
+        totalTaxAmount: existing.invoice.totalTaxAmount,
       });
 
       return this.getSalesInvoiceById(existing.invoice._id.toString(), authenticatedUser);

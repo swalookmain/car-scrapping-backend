@@ -25,7 +25,7 @@ import { TaxConfigRepository } from 'src/tax-compliance/tax-config.repository';
 import { GstAuditService } from 'src/tax-compliance/gst-audit.service';
 import { InvoiceType } from 'src/common/enum/invoiceType.enum';
 import { GstAuditEventType } from 'src/common/enum/gstAuditEventType.enum';
-
+import { LedgerService } from 'src/accounting/services/ledger.service';
 
 @Injectable()
 export class InvoiceService {
@@ -38,6 +38,7 @@ export class InvoiceService {
       private readonly taxEngineService: TaxEngineService,
       private readonly taxConfigRepository: TaxConfigRepository,
       private readonly gstAuditService: GstAuditService,
+      private readonly ledgerService: LedgerService,
       private readonly storageService: StorageService,
       @Inject(WINSTON_MODULE_NEST_PROVIDER)
       private readonly logger: LoggerService,
@@ -273,6 +274,18 @@ export class InvoiceService {
           invoiceId,
           updateData,
         );
+        if (
+          sanitizedData.status === InvoiceStatus.CONFIRMED &&
+          updatedInvoice
+        ) {
+          await this.ledgerService.postPurchaseInvoice(orgId, {
+            _id: updatedInvoice._id,
+            organizationId: updatedInvoice.organizationId,
+            taxableAmount: updatedInvoice.taxableAmount,
+            totalTaxAmount: updatedInvoice.totalTaxAmount,
+            reverseChargeApplicable: updatedInvoice.reverseChargeApplicable,
+          });
+        }
         await this.gstAuditService.logEvent({
           organizationId: orgId,
           invoiceType: InvoiceType.PURCHASE,

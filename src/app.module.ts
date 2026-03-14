@@ -16,6 +16,8 @@ import { VehicleComplianceModule } from './vehicle-compliance/vehicle-compliance
 import { SalesDispatchModule } from './sales-dispatch/sales-dispatch.module';
 import { TaxComplianceModule } from './tax-compliance/tax-compliance.module';
 import { DamageAdjustmentsModule } from './damage-adjustments/damage-adjustments.module';
+import { ReportsModule } from './reports/reports.module';
+import { AccountingModule } from './accounting/accounting.module';
 
 @Module({
   imports: [
@@ -32,6 +34,8 @@ import { DamageAdjustmentsModule } from './damage-adjustments/damage-adjustments
     SalesDispatchModule,
     TaxComplianceModule,
     DamageAdjustmentsModule,
+    ReportsModule,
+    AccountingModule,
   ],
   controllers: [AppController],
   providers: [AppService, AuditLogInterceptor],

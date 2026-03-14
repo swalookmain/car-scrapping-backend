@@ -1,0 +1,5 @@
+export enum LedgerReferenceType {
+  PURCHASE_INVOICE = 'PURCHASE_INVOICE',
+  SALES_INVOICE = 'SALES_INVOICE',
+  PAYMENT = 'PAYMENT',
+}
