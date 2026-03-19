@@ -23,6 +23,12 @@ export class CreateStaffDto {
 
   @ApiProperty()
   @IsString()
+  @MinLength(10)
+  @MaxLength(10)
+  phoneNumber: string;
+
+  @ApiProperty()
+  @IsString()
   @MinLength(6)
   password: string;
 

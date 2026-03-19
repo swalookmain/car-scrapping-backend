@@ -68,10 +68,7 @@ export class InventoryService {
       }
 
       const vechileModel =
-        (vechileInvoice as unknown as { model_name?: string; model?: string })
-          .model_name ??
-        (vechileInvoice as unknown as { model?: string }).model ??
-        'UNKNOWN';
+        (vechileInvoice as { model_name?: string }).model_name ?? 'UNKNOWN';
 
       const parts = sanitizedData.parts ?? [];
       const records = parts.map((part) => {
