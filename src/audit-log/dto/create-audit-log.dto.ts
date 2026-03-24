@@ -17,6 +17,11 @@ export class CreateAuditLogDto {
   @IsMongoId()
   actorId?: Types.ObjectId;
 
+  @ApiPropertyOptional({ description: 'Name of the user performing the action' })
+  @IsOptional()
+  @IsString()
+  actorName?: string;
+
   @ApiProperty({
     enum: Role,
     description: 'Role of the user performing the action',

@@ -4,14 +4,17 @@ import { Types } from 'mongoose';
 import { Model } from 'mongoose';
 import type { AuthenticatedUser } from 'src/common/interface/authenticated-user.interface';
 import { sanitizeObject, validateObjectId } from 'src/common/utils/security.util';
+import { getPagination } from 'src/common/utils/pagination.util';
 import { InvoiceType } from 'src/common/enum/invoiceType.enum';
 import { GstAuditEventType } from 'src/common/enum/gstAuditEventType.enum';
 import { SalesInvoiceStatus } from 'src/common/enum/salesInvoiceStatus.enum';
 import { TaxConfigRepository } from './tax-config.repository';
 import { EwayBillRecordRepository } from './eway-bill-record.repository';
+import { GstAuditLogRepository } from './gst-audit-log.repository';
 import { GstAuditService } from './gst-audit.service';
 import type { UpsertTaxConfigDto } from './dto/upsert-tax-config.dto';
 import type { CreateEwayBillRecordDto } from './dto/create-eway-bill-record.dto';
+import type { QueryGstAuditLogDto } from './dto/query-gst-audit-log.dto';
 import {
   SalesInvoice,
   SalesInvoiceDocument,
@@ -22,6 +25,7 @@ export class TaxComplianceService {
   constructor(
     private readonly taxConfigRepository: TaxConfigRepository,
     private readonly ewayBillRecordRepository: EwayBillRecordRepository,
+    private readonly gstAuditLogRepository: GstAuditLogRepository,
     private readonly gstAuditService: GstAuditService,
     @InjectModel(SalesInvoice.name)
     private readonly salesInvoiceModel: Model<SalesInvoiceDocument>,
@@ -116,6 +120,74 @@ export class TaxComplianceService {
     });
 
     return created;
+  }
+
+  async getEwayBillRecords(
+    authenticatedUser: AuthenticatedUser,
+    page?: number,
+    limit?: number,
+  ) {
+    const orgId = this.getOrgId(authenticatedUser);
+    const { page: safePage, limit: safeLimit } = getPagination(page, limit);
+    const { data, total } = await this.ewayBillRecordRepository.findPaginated(
+      {
+        organizationId: new Types.ObjectId(orgId),
+      },
+      safePage,
+      safeLimit,
+    );
+    const totalPages = Math.ceil(total / safeLimit);
+    return {
+      data,
+      meta: {
+        page: safePage,
+        limit: safeLimit,
+        total,
+        totalPages,
+      },
+    };
+  }
+
+  async getGstAuditLogs(
+    query: QueryGstAuditLogDto,
+    authenticatedUser: AuthenticatedUser,
+  ) {
+    const orgId = this.getOrgId(authenticatedUser);
+    const { page: safePage, limit: safeLimit } = getPagination(
+      query.page,
+      query.limit,
+    );
+    const filter: Record<string, unknown> = {
+      organizationId: new Types.ObjectId(orgId),
+    };
+    if (query.eventType) {
+      filter.eventType = query.eventType;
+    }
+    if (query.invoiceType) {
+      filter.invoiceType = query.invoiceType;
+    }
+    if (query.invoiceId) {
+      filter.invoiceId = new Types.ObjectId(
+        validateObjectId(query.invoiceId, 'Invoice ID'),
+      );
+    }
+
+    const { data, total } = await this.gstAuditLogRepository.findPaginated(
+      filter,
+      safePage,
+      safeLimit,
+    );
+
+    const totalPages = Math.ceil(total / safeLimit);
+    return {
+      data,
+      meta: {
+        page: safePage,
+        limit: safeLimit,
+        total,
+        totalPages,
+      },
+    };
   }
 
   private getOrgId(authenticatedUser: AuthenticatedUser): string {

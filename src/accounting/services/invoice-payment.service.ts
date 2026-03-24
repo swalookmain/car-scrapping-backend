@@ -34,7 +34,7 @@ export class InvoicePaymentService {
     invoiceType: string,
     invoiceId: string,
   ) {
-    const id = validateObjectId(invoiceId, 'Invoice ID');
+    // const id = validateObjectId(invoiceId, 'Invoice ID');
     return this.invoicePaymentRecordRepository.findByOrganizationAndInvoice(
       organizationId,
       invoiceType,

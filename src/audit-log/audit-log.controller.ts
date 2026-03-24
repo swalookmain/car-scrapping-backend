@@ -23,6 +23,7 @@ import { Roles } from 'src/common/decorators/roles.decorators';
 import { GetUser } from 'src/common/decorators/user.decorator';
 import { Role } from 'src/common/enum/role.enum';
 import type { AuthenticatedUser } from 'src/common/interface/authenticated-user.interface';
+import { Types } from 'mongoose';
 
 @ApiTags('Audit Logs')
 @ApiBearerAuth()
@@ -39,7 +40,16 @@ export class AuditLogController {
     @Body() createAuditLogDto: CreateAuditLogDto,
     @GetUser() user: AuthenticatedUser,
   ) {
-    return this.auditLogService.create(createAuditLogDto, user.role);
+    const auditPayload: CreateAuditLogDto = {
+      ...createAuditLogDto,
+      actorId: createAuditLogDto.actorId ?? new Types.ObjectId(user.userId),
+      actorName: createAuditLogDto.actorName ?? user.name,
+      organizationId:
+        createAuditLogDto.organizationId ??
+        (user.orgId ? new Types.ObjectId(user.orgId) : undefined),
+    };
+
+    return this.auditLogService.create(auditPayload, user.role);
   }
 
   @Get()

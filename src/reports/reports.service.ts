@@ -4,7 +4,7 @@ import { InvoiceType } from 'src/common/enum/invoiceType.enum';
 import { InvoiceRepository } from 'src/invoice/invoice.repository';
 import {
   SalesInvoiceRepository,
-  GstTotalsResult,
+  // GstTotalsResult,
 } from 'src/sales-dispatch/sales-invoice.repository';
 import type { GstSummaryQueryDto } from './dto/gst-summary-query.dto';
 

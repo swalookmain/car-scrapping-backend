@@ -1,7 +1,8 @@
-import { Body, Controller, Get, Post, UseGuards } from '@nestjs/common';
+import { Body, Controller, Get, Post, Query, UseGuards } from '@nestjs/common';
 import {
   ApiBearerAuth,
   ApiOperation,
+  ApiQuery,
   ApiResponse,
   ApiTags,
 } from '@nestjs/swagger';
@@ -12,6 +13,7 @@ import { jwtAuthGuard } from 'src/common/guards/jwt-auth.guard';
 import { RolesGuard } from 'src/common/guards/roles.guard';
 import type { AuthenticatedUser } from 'src/common/interface/authenticated-user.interface';
 import { CreateEwayBillRecordDto } from './dto/create-eway-bill-record.dto';
+import { QueryGstAuditLogDto } from './dto/query-gst-audit-log.dto';
 import { UpsertTaxConfigDto } from './dto/upsert-tax-config.dto';
 import { TaxComplianceService } from './tax-compliance.service';
 
@@ -54,5 +56,32 @@ export class TaxComplianceController {
       createEwayBillRecordDto,
       authenticatedUser,
     );
+  }
+
+  @Get('eway-bills')
+  @Roles(Role.ADMIN, Role.STAFF)
+  @ApiOperation({ summary: 'Get E-Way bill records' })
+  @ApiQuery({ name: 'page', required: false, type: Number })
+  @ApiQuery({ name: 'limit', required: false, type: Number })
+  getEwayBills(
+    @GetUser() authenticatedUser: AuthenticatedUser,
+    @Query('page') page?: number,
+    @Query('limit') limit?: number,
+  ) {
+    return this.taxComplianceService.getEwayBillRecords(
+      authenticatedUser,
+      page,
+      limit,
+    );
+  }
+
+  @Get('gst-audit-log')
+  @Roles(Role.ADMIN, Role.STAFF)
+  @ApiOperation({ summary: 'Get GST audit logs' })
+  getGstAuditLogs(
+    @Query() query: QueryGstAuditLogDto,
+    @GetUser() authenticatedUser: AuthenticatedUser,
+  ) {
+    return this.taxComplianceService.getGstAuditLogs(query, authenticatedUser);
   }
 }
