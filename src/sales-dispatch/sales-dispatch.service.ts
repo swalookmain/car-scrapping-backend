@@ -38,6 +38,7 @@ import { GstAuditService } from 'src/tax-compliance/gst-audit.service';
 import { InvoiceType } from 'src/common/enum/invoiceType.enum';
 import { GstAuditEventType } from 'src/common/enum/gstAuditEventType.enum';
 import { LedgerService } from 'src/accounting/services/ledger.service';
+import { BuyerType } from 'src/common/enum/buyerType.enum';
 
 type InventoryLike = {
   _id: Types.ObjectId;
@@ -48,6 +49,36 @@ type InventoryLike = {
   openingStock: number;
   quantityReceived: number;
   condition: Condition;
+};
+
+type SalesInvoiceWithBuyer = Record<string, unknown> & {
+  _id: Types.ObjectId;
+  organizationId: Types.ObjectId;
+  buyerId: Types.ObjectId;
+  gstApplicable: boolean;
+  gstRate?: number;
+  reverseChargeApplicable: boolean;
+  placeOfSupplyState: string;
+  status: SalesInvoiceStatus;
+  totalAmount: number;
+  taxableAmount: number;
+  totalTaxAmount: number;
+  buyerName?: string;
+  buyer?: {
+    _id: Types.ObjectId;
+    buyerName: string;
+    buyerType: BuyerType;
+  };
+};
+
+type SalesInvoiceItemLike = {
+  _id: Types.ObjectId;
+  salesInvoiceId: Types.ObjectId;
+  partId: Types.ObjectId;
+  itemCode: string;
+  quantity: number;
+  unitPrice: number;
+  lineTotal: number;
 };
 
 @Injectable()
@@ -281,9 +312,33 @@ export class SalesDispatchService {
       page,
       limit,
     );
+    const enrichedData = await Promise.all(
+      data.map(async (invoice) => {
+        const buyer = await this.buyerRepository.findByOrgAndId(
+          orgId,
+          invoice.buyerId.toString(),
+        );
+        const invoiceObj =
+          typeof (invoice as { toObject?: () => Record<string, unknown> }).toObject ===
+          'function'
+            ? (invoice as { toObject: () => Record<string, unknown> }).toObject()
+            : (invoice as unknown as Record<string, unknown>);
+        return {
+          ...invoiceObj,
+          buyerName: buyer?.buyerName,
+          buyer: buyer
+            ? {
+                _id: buyer._id,
+                buyerName: buyer.buyerName,
+                buyerType: buyer.buyerType,
+              }
+            : undefined,
+        };
+      }),
+    );
     const totalPages = Math.ceil(total / limit);
     return {
-      data: data as unknown as Record<string, unknown>[],
+      data: enrichedData as unknown as Record<string, unknown>[],
       meta: {
         page,
         limit,
@@ -296,7 +351,7 @@ export class SalesDispatchService {
   async getSalesInvoiceById(
     salesInvoiceId: string,
     authenticatedUser: AuthenticatedUser,
-  ) {
+  ): Promise<{ invoice: SalesInvoiceWithBuyer; items: SalesInvoiceItemLike[] }> {
     const orgId = this.getOrgId(authenticatedUser);
     const validatedInvoiceId = validateObjectId(salesInvoiceId, 'Sales Invoice ID');
     const invoice = await this.salesInvoiceRepository.findByOrgAndId(
@@ -306,12 +361,43 @@ export class SalesDispatchService {
     if (!invoice) {
       throw new NotFoundException('Sales invoice not found');
     }
+    const buyer = await this.buyerRepository.findByOrgAndId(
+      orgId,
+      invoice.buyerId.toString(),
+    );
     const items = await this.salesInvoiceItemRepository.findBySalesInvoiceId(
       validatedInvoiceId,
     );
+    const invoiceObj =
+      typeof (invoice as { toObject?: () => Record<string, unknown> }).toObject ===
+      'function'
+        ? (invoice as { toObject: () => Record<string, unknown> }).toObject()
+        : (invoice as unknown as Record<string, unknown>);
+    const enrichedInvoice: SalesInvoiceWithBuyer = {
+      ...invoiceObj,
+      _id: invoice._id,
+      organizationId: invoice.organizationId,
+      buyerId: invoice.buyerId,
+      gstApplicable: invoice.gstApplicable,
+      gstRate: invoice.gstRate,
+      reverseChargeApplicable: invoice.reverseChargeApplicable,
+      placeOfSupplyState: invoice.placeOfSupplyState,
+      status: invoice.status,
+      totalAmount: invoice.totalAmount,
+      taxableAmount: invoice.taxableAmount,
+      totalTaxAmount: invoice.totalTaxAmount,
+      buyerName: buyer?.buyerName,
+      buyer: buyer
+        ? {
+            _id: buyer._id,
+            buyerName: buyer.buyerName,
+            buyerType: buyer.buyerType,
+          }
+        : undefined,
+    };
     return {
-      invoice,
-      items,
+      invoice: enrichedInvoice,
+      items: items as unknown as SalesInvoiceItemLike[],
     };
   }
 

@@ -1,5 +1,5 @@
 import { ApiProperty } from '@nestjs/swagger';
-import { IsDateString, IsEnum, IsMongoId, IsString } from 'class-validator';
+import { IsDateString, IsEnum, IsMongoId, IsOptional, IsString } from 'class-validator';
 import { TransportMode } from 'src/common/enum/transportMode.enum';
 
 export class CreateEwayBillRecordDto {
@@ -24,6 +24,7 @@ export class CreateEwayBillRecordDto {
   vehicleNumber: string;
 
   @ApiProperty()
+  @IsOptional()
   @IsString()
-  documentUrl: string;
+  documentUrl?: string;
 }

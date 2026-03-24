@@ -8,6 +8,7 @@ import {
 } from './damage-adjustment.schema';
 import { DamageAdjustmentRepository } from './damage-adjustment.repository';
 import { InventoryModule } from 'src/inventory/inventory.module';
+import { InvoiceModule } from 'src/invoice/invoice.module';
 
 @Module({
   imports: [
@@ -15,6 +16,7 @@ import { InventoryModule } from 'src/inventory/inventory.module';
       { name: DamageAdjustment.name, schema: DamageAdjustmentSchema },
     ]),
     InventoryModule,
+    InvoiceModule,
   ],
   controllers: [DamageAdjustmentsController],
   providers: [DamageAdjustmentsService, DamageAdjustmentRepository],

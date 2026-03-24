@@ -41,6 +41,7 @@ export class AuditLogInterceptor implements NestInterceptor {
 
     const baseActor = this.getActor(req);
     let actorId = baseActor.actorId;
+    let actorName = baseActor.actorName;
     let actorRole = baseActor.actorRole ?? Role.SYSTEM;
     let organizationId = baseActor.organizationId ?? null;
 
@@ -52,6 +53,7 @@ export class AuditLogInterceptor implements NestInterceptor {
         await this.auditLogService.create(
           {
             actorId: this.toObjectId(actorId),
+            actorName,
             actorRole,
             organizationId: this.toObjectId(organizationId),
             action: this.getAction(req, status === 'SUCCESS'),
@@ -86,6 +88,7 @@ export class AuditLogInterceptor implements NestInterceptor {
         const responseUser = this.getResponseUser(data);
         if (!actorId && responseUser?.id) {
           actorId = responseUser.id;
+          actorName = responseUser.name ?? actorName;
           actorRole = responseUser.role ?? actorRole;
           organizationId = responseUser.orgId ?? organizationId;
         }
@@ -105,15 +108,22 @@ export class AuditLogInterceptor implements NestInterceptor {
 
   private getActor(req: Request): {
     actorId: string | null;
+    actorName: string | undefined;
     actorRole: Role | null;
     organizationId: string | null;
   } {
     const user = (req as Request & { user?: AuthenticatedUser }).user;
     if (!user) {
-      return { actorId: null, actorRole: null, organizationId: null };
+      return {
+        actorId: null,
+        actorName: undefined,
+        actorRole: null,
+        organizationId: null,
+      };
     }
     return {
       actorId: user.userId,
+      actorName: user.name,
       actorRole: user.role,
       organizationId: user.orgId,
     };
@@ -121,7 +131,7 @@ export class AuditLogInterceptor implements NestInterceptor {
 
   private getResponseUser(
     data: unknown,
-  ): { id?: string; role?: Role; orgId?: string | null } | null {
+  ): { id?: string; name?: string; role?: Role; orgId?: string | null } | null {
     if (!data || typeof data !== 'object' || !('user' in data)) {
       return null;
     }
@@ -130,6 +140,7 @@ export class AuditLogInterceptor implements NestInterceptor {
       return null;
     }
     const id = typeof user.id === 'string' ? user.id : undefined;
+    const name = typeof user.name === 'string' ? user.name : undefined;
     const role = Object.values(Role).includes(user.role as Role)
       ? (user.role as Role)
       : undefined;
@@ -137,7 +148,7 @@ export class AuditLogInterceptor implements NestInterceptor {
       user.orgId === null || typeof user.orgId === 'string'
         ? (user.orgId as string | null)
         : undefined;
-    return { id, role, orgId };
+    return { id, name, role, orgId };
   }
 
   private getResource(req: Request): string {

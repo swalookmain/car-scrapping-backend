@@ -188,6 +188,7 @@ export class VehicleComplianceService {
       const validatedCodRecordId = validateObjectId(codRecordId, 'COD record ID');
       const orgId = this.getOrgId(authenticatedUser);
       const actorId = authenticatedUser.userId;
+      const actorName = authenticatedUser.name;
       const codRecord = await this.vehicleComplianceRepository.findById(
         validatedCodRecordId,
       );
@@ -288,9 +289,9 @@ export class VehicleComplianceService {
         await this.auditLogService.create(
           {
             actorId: new Types.ObjectId(actorId),
+            actorName,
             actorRole,
             organizationId: new Types.ObjectId(orgId),
-            // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment -- CreateAuditLogDto action enum
             action: AuditAction.UPDATE_COD_STATUS,
             resource: 'vehicle_cod_record',
             resourceId: new Types.ObjectId(validatedCodRecordId),
@@ -313,9 +314,9 @@ export class VehicleComplianceService {
         await this.auditLogService.create(
           {
             actorId: new Types.ObjectId(actorId),
+            actorName,
             actorRole,
             organizationId: new Types.ObjectId(orgId),
-            // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment -- CreateAuditLogDto action enum
             action: AuditAction.UPDATE_CVS_STATUS,
             resource: 'vehicle_cod_record',
             resourceId: new Types.ObjectId(validatedCodRecordId),

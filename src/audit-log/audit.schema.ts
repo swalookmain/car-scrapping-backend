@@ -8,6 +8,9 @@ export class AuditLog extends Document {
   @Prop({ type: Types.ObjectId, required: false, default: null })
   actorId: Types.ObjectId | null;
 
+  @Prop({ type: String, required: false, default: null })
+  actorName: string | null;
+
   @Prop({ enum: Role, required: true })
   actorRole: Role;
 

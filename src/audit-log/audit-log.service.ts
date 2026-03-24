@@ -1,8 +1,9 @@
 import {
   Injectable,
-  BadRequestException,
   ForbiddenException,
   Inject,
+  InternalServerErrorException,
+  NotFoundException,
 } from '@nestjs/common';
 import type { LoggerService } from '@nestjs/common';
 import { WINSTON_MODULE_NEST_PROVIDER } from 'nest-winston';
@@ -21,6 +22,7 @@ import { AuditAction } from 'src/common/enum/audit.enum';
 export interface SanitizedAuditLog {
   id: string;
   actorId: string | null;
+  actorName: string | null;
   actorRole: Role;
   organizationId: string | null;
   action: AuditAction;
@@ -73,7 +75,7 @@ export class AuditLogService {
         error instanceof Error ? error.stack : undefined,
         'AuditLogService',
       );
-      throw new BadRequestException('Failed to create audit log');
+      throw new InternalServerErrorException('Failed to create audit log');
     }
   }
 
@@ -176,7 +178,7 @@ export class AuditLogService {
     const auditLog = await this.auditRepository.findById(validatedId);
 
     if (!auditLog) {
-      throw new BadRequestException('Audit log not found');
+      throw new  NotFoundException('Audit log not found');
     }
 
     // Super admin can see all logs
@@ -213,6 +215,7 @@ export class AuditLogService {
   private sanitizeAuditLog(log: AuditLogDocument): SanitizedAuditLog {
     const logId = log._id ? log._id.toString() : '';
     const actorId = log.actorId ? log.actorId.toString() : null;
+    const actorName = log.actorName ?? null;
     const organizationId = log.organizationId
       ? log.organizationId.toString()
       : null;
@@ -221,6 +224,7 @@ export class AuditLogService {
     return {
       id: logId,
       actorId,
+      actorName,
       actorRole: log.actorRole,
       organizationId,
       action: log.action,
@@ -253,7 +257,7 @@ export class AuditLogService {
         error instanceof Error ? error.stack : undefined,
         'AuditLogService',
       );
-      throw new BadRequestException('Failed to delete expired audit logs');
+      throw new InternalServerErrorException('Failed to delete expired audit logs');
     }
   }
 }

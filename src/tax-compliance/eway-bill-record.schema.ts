@@ -22,7 +22,7 @@ export class EwayBillRecord extends Document {
   @Prop({ type: String, required: true, trim: true })
   vehicleNumber: string;
 
-  @Prop({ type: String, required: true, trim: true })
+  @Prop({ type: String, required: false, trim: true })
   documentUrl: string;
 }
 

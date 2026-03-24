@@ -12,6 +12,8 @@ import type { PaginatedResponse } from 'src/common/interface/paginated-response.
 import { getPagination } from 'src/common/utils/pagination.util';
 import { Role } from 'src/common/enum/role.enum';
 import { InventoryRepository } from 'src/inventory/inventory.repository';
+import type { InventoryDocument } from 'src/inventory/inventory.schema';
+import { InvoiceRepository } from 'src/invoice/invoice.repository';
 import { DamageAdjustmentRepository } from './damage-adjustment.repository';
 import type { CreateDamageAdjustmentDto } from './dto/create-damage-adjustment.dto';
 import type { QueryDamageAdjustmentsDto } from './dto/query-damage-adjustments.dto';
@@ -32,6 +34,7 @@ export class DamageAdjustmentsService {
   constructor(
     private readonly damageAdjustmentRepo: DamageAdjustmentRepository,
     private readonly inventoryRepo: InventoryRepository,
+    private readonly invoiceRepo: InvoiceRepository,
   ) {}
 
   async create(
@@ -47,8 +50,17 @@ export class DamageAdjustmentsService {
     if (!inventory) {
       throw new NotFoundException('Inventory part not found');
     }
+    const invoice = await this.invoiceRepo.findById(inventory.invoiceId.toString());
+    if (!invoice) {
+      throw new NotFoundException('Invoice not found for inventory part');
+    }
+    if (invoice.organizationId?.toString() !== orgId) {
+      throw new BadRequestException(
+        'Inventory part does not belong to organization',
+      );
+    }
 
-    const previousCondition = inventory.condition as Condition;
+    const previousCondition = inventory.condition;
     const newCondition = sanitized.newCondition;
 
     if (previousCondition === newCondition) {
@@ -77,10 +89,9 @@ export class DamageAdjustmentsService {
     if (previousCondition === Condition.GOOD && newCondition === Condition.DAMAGED) {
       await this.applyGoodToDamagedAdjustment(
         inventoryId,
-        inventory as unknown as any,
+        inventory,
         quantityAffected,
         sanitized.reason,
-        orgId,
         authenticatedUser.userId,
       );
     } else if (
@@ -89,10 +100,8 @@ export class DamageAdjustmentsService {
     ) {
       await this.applyDamagedToGoodAdjustment(
         inventoryId,
-        inventory as unknown as any,
+        inventory,
         quantityAffected,
-        sanitized.reason,
-        orgId,
         authenticatedUser.userId,
       );
     } else {
@@ -145,10 +154,9 @@ export class DamageAdjustmentsService {
 
   private async applyGoodToDamagedAdjustment(
     inventoryId: string,
-    inventory: any,
+    inventory: InventoryDocument,
     quantityAffected: number,
     reason: string,
-    orgId: string,
     userId: string,
   ) {
     const nextOpeningStock = inventory.openingStock - quantityAffected;
@@ -170,11 +178,11 @@ export class DamageAdjustmentsService {
     });
 
     await this.inventoryRepo.create({
-      invoiceId: inventory['invoiceId'] as Types.ObjectId,
-      vechileId: inventory['vechileId'] as Types.ObjectId,
-      purchaseInvoiceNumber: inventory['purchaseInvoiceNumber'] as string,
-      vechileModel: inventory.vechileModel as string,
-      partName: inventory.partName as string,
+      invoiceId: inventory.invoiceId,
+      vechileId: inventory.vechileId,
+      purchaseInvoiceNumber: inventory.purchaseInvoiceNumber,
+      vechileModel: inventory.vechileModel,
+      partName: inventory.partName,
       partType: inventory.partType,
       openingStock: quantityAffected,
       quantityReceived: 0,
@@ -182,8 +190,8 @@ export class DamageAdjustmentsService {
       availableQuantity: quantityAffected,
       condition: Condition.DAMAGED,
       status: Status.DAMAGE_ONLY,
-      unitPrice: inventory.unitPrice as number | undefined,
-      documents: inventory.documents,
+      unitPrice: inventory.unitPrice,
+      documents: inventory.documents ?? [],
       createdBy: new Types.ObjectId(userId),
       damageReason: reason,
       damageRecordedAt: new Date(),
@@ -193,10 +201,8 @@ export class DamageAdjustmentsService {
 
   private async applyDamagedToGoodAdjustment(
     inventoryId: string,
-    inventory: any,
+    inventory: InventoryDocument,
     quantityAffected: number,
-    reason: string,
-    orgId: string,
     userId: string,
   ) {
     const nextOpeningStock = inventory.openingStock - quantityAffected;
@@ -206,8 +212,8 @@ export class DamageAdjustmentsService {
       throw new BadRequestException('Adjustment would make stock negative');
     }
 
-    const nextStatus =
-      nextAvailable <= 0 ? Status.DAMAGE_ONLY : Status.DAMAGE_ONLY;
+    // For DAMAGED inventory rows, we always keep the status as DAMAGE_ONLY.
+    const nextStatus = Status.DAMAGE_ONLY;
 
     await this.inventoryRepo.updateById(inventoryId, {
       openingStock: nextOpeningStock,
@@ -216,11 +222,11 @@ export class DamageAdjustmentsService {
     });
 
     await this.inventoryRepo.create({
-      invoiceId: inventory['invoiceId'] as Types.ObjectId,
-      vechileId: inventory['vechileId'] as Types.ObjectId,
-      purchaseInvoiceNumber: inventory['purchaseInvoiceNumber'] as string,
-      vechileModel: inventory.vechileModel as string,
-      partName: inventory.partName as string,
+      invoiceId: inventory.invoiceId,
+      vechileId: inventory.vechileId,
+      purchaseInvoiceNumber: inventory.purchaseInvoiceNumber,
+      vechileModel: inventory.vechileModel,
+      partName: inventory.partName,
       partType: inventory.partType,
       openingStock: quantityAffected,
       quantityReceived: 0,
@@ -228,12 +234,9 @@ export class DamageAdjustmentsService {
       availableQuantity: quantityAffected,
       condition: Condition.GOOD,
       status: Status.AVAILABLE,
-      unitPrice: inventory.unitPrice as number | undefined,
-      documents: inventory.documents,
+      unitPrice: inventory.unitPrice,
+      documents: inventory.documents ?? [],
       createdBy: new Types.ObjectId(userId),
-      damageReason: reason,
-      damageRecordedAt: new Date(),
-      damageRecordedBy: new Types.ObjectId(userId),
     });
   }
 
