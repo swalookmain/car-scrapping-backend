@@ -380,7 +380,7 @@ export class InvoiceService {
     async getInvoiceById(invoiceId: string)
     {
       try {
-        const invoice = await this.invoiceRepository.findById(invoiceId);
+        const invoice = await this.invoiceRepository.findByIdWithUserNames(invoiceId);
         if(!invoice || invoice.isDeleted) {
           throw new NotFoundException('Invoice not found');
         }
@@ -424,7 +424,7 @@ export class InvoiceService {
         const orgId = this.getOrgId(authenticatedUser);
         console.log('orgId', orgId);
         const { page: safePage, limit: safeLimit } = getPagination(page, limit);
-        const { data, total } = await this.invoiceRepository.findPaginated(
+        const { data, total } = await this.invoiceRepository.findPaginatedWithUserNames(
           {
             organizationId: new Types.ObjectId(orgId),
             isDeleted: { $ne: true },
