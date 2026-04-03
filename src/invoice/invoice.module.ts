@@ -30,6 +30,7 @@ import { SellerType } from 'src/common/enum/sellerType.enum';
 import { VehicleComplianceModule } from 'src/vehicle-compliance/vehicle-compliance.module';
 import { TaxComplianceModule } from 'src/tax-compliance/tax-compliance.module';
 import { AccountingModule } from 'src/accounting/accounting.module';
+import { UsersModule } from 'src/users/users.module';
 
 @Module({
   imports: [
@@ -63,6 +64,7 @@ import { AccountingModule } from 'src/accounting/accounting.module';
     forwardRef(() => VehicleComplianceModule),
     TaxComplianceModule,
     AccountingModule,
+    UsersModule,
   ],
   controllers: [InvoiceController],
   providers: [

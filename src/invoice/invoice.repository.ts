@@ -1,6 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
-import { Model, Types } from 'mongoose';
+import { Model, PopulateOptions, SortOrder, Types } from 'mongoose';
 import { Invoice, InvoiceDocument } from './invoice.schema';
 import { BaseRepository } from 'src/common/repository/base.repository';
 
@@ -14,11 +14,74 @@ export interface GstTotalsResult {
 
 @Injectable()
 export class InvoiceRepository extends BaseRepository<InvoiceDocument> {
+  private readonly userNamePopulate: PopulateOptions[] = [
+    { path: 'createdBy', select: 'name' },
+    { path: 'updatedBy', select: 'name' },
+    { path: 'deletedBy', select: 'name' },
+  ];
+
+  private extractUserName(value: unknown): string | null {
+    if (!value || typeof value !== 'object') {
+      return null;
+    }
+
+    const name = (value as { name?: unknown }).name;
+    return typeof name === 'string' ? name : null;
+  }
+
+  private mapUserNames<T extends Record<string, unknown>>(invoice: T): T {
+    return {
+      ...invoice,
+      createdBy: this.extractUserName(invoice.createdBy),
+      updatedBy: this.extractUserName(invoice.updatedBy),
+      deletedBy: this.extractUserName(invoice.deletedBy),
+    };
+  }
+
   constructor(
     @InjectModel(Invoice.name)
     invoiceModel: Model<InvoiceDocument>,
   ) {
     super(invoiceModel);
+  }
+
+  async findByIdWithUserNames(id: string) {
+    const invoice = await this.model
+      .findById(id)
+      .populate(this.userNamePopulate)
+      .lean()
+      .exec();
+
+    return invoice
+      ? this.mapUserNames(invoice as unknown as Record<string, unknown>)
+      : null;
+  }
+
+  async findPaginatedWithUserNames(
+    filter: Record<string, unknown>,
+    page: number,
+    limit: number,
+    sort: Record<string, SortOrder> = { createdAt: -1 },
+  ) {
+    const skip = (page - 1) * limit;
+    const [data, total] = await Promise.all([
+      this.model
+        .find(filter)
+        .sort(sort)
+        .skip(skip)
+        .limit(limit)
+        .populate(this.userNamePopulate)
+        .lean()
+        .exec(),
+      this.model.countDocuments(filter),
+    ]);
+
+    return {
+      data: data.map((invoice) =>
+        this.mapUserNames(invoice as unknown as Record<string, unknown>),
+      ),
+      total,
+    };
   }
 
   async getGstTotalsForPeriod(
