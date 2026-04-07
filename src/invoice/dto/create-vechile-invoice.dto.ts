@@ -1,5 +1,6 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import {
+  IsBoolean,
   IsDateString,
   IsEnum,
   IsMongoId,
@@ -19,6 +20,11 @@ export class CreateVechileInvoiceDto {
   @ApiProperty()
   @IsString()
   ownerName: string;
+
+  @ApiPropertyOptional({ default: true, description: 'Whether vehicle belongs to owner itself' })
+  @IsBoolean()
+  @IsOptional()
+  isOwnerSelf?: boolean;
 
   // Vehicle Identity
   @ApiProperty({ enum: VehicleType })

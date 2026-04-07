@@ -15,6 +15,9 @@ export class VechileInvoice extends Document {
   @Prop({ type: String, required: true })
   ownerName: string;
 
+  @Prop({ type: Boolean, default: true })
+  isOwnerSelf: boolean;
+
   // Vehicle Identity
   @Prop({ enum: VehicleType, required: true })
   vehicle_type: VehicleType;

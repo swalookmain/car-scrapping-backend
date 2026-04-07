@@ -9,11 +9,13 @@ import { WINSTON_MODULE_NEST_PROVIDER } from 'nest-winston';
 import { Types } from 'mongoose';
 import type { LoggerService } from '@nestjs/common';
 import { sanitizeObject, validateObjectId } from 'src/common/utils/security.util';
+import { assertSupportedDocumentFile } from 'src/common/utils/document-upload.util';
 import { AuthenticatedUser } from 'src/common/interface/authenticated-user.interface';
 import { CreateVechileInvoiceDto } from './dto/create-vechile-invoice.dto';
 import { InvoiceStatus } from 'src/common/enum/invoiceStatus.enum';
 import { UpdateVechileInvoiceDto } from './dto/update-vechile-invoice.dto';
 import { VechileInvoice } from './vechile-invoice.schema';
+import type { InvoiceDocument } from './invoice.schema';
 import { PaginatedResponse } from 'src/common/interface/paginated-response.interface';
 import { getPagination } from 'src/common/utils/pagination.util';
 import { StorageService, UploadFile } from 'src/common/services/storage.service';
@@ -26,6 +28,10 @@ import { GstAuditService } from 'src/tax-compliance/gst-audit.service';
 import { InvoiceType } from 'src/common/enum/invoiceType.enum';
 import { GstAuditEventType } from 'src/common/enum/gstAuditEventType.enum';
 import { LedgerService } from 'src/accounting/services/ledger.service';
+import { LeadService } from 'src/lead/lead.service';
+import { PurchaseDocumentType } from './purchase-document.schema';
+import { LeadSource } from 'src/common/enum/leadSource.enum';
+import type { LeadDocument } from 'src/lead/lead.schema';
 
 @Injectable()
 export class InvoiceService {
@@ -39,6 +45,7 @@ export class InvoiceService {
       private readonly taxConfigRepository: TaxConfigRepository,
       private readonly gstAuditService: GstAuditService,
       private readonly ledgerService: LedgerService,
+      private readonly leadService: LeadService,
       private readonly storageService: StorageService,
       @Inject(WINSTON_MODULE_NEST_PROVIDER)
       private readonly logger: LoggerService,
@@ -46,7 +53,13 @@ export class InvoiceService {
 
     async createInvoice(createInvoiceDto: CreateInvoiceDto, authenticatedUser: AuthenticatedUser) {
       try {
-        const sanitizedData = sanitizeObject(createInvoiceDto) as CreateInvoiceDto;
+        let sanitizedData = sanitizeObject(createInvoiceDto) as CreateInvoiceDto;
+        if (sanitizedData.leadId) {
+          sanitizedData = await this.hydrateInvoiceFromLead(
+            sanitizedData,
+            authenticatedUser,
+          );
+        }
         this.assertSellerTypeFields(sanitizedData.sellerType, sanitizedData);
         const orgId = this.getOrgId(authenticatedUser);
         const organization = await this.organizationsService.getById(orgId);
@@ -66,14 +79,19 @@ export class InvoiceService {
           orgStateCode: taxConfig.stateCode,
           placeOfSupplyState: sanitizedData.placeOfSupplyState,
         });
-        const { purchaseDate, auctionDate, ...restData } = sanitizedData;
+        const { purchaseDate, auctionDate, leadId, ...restData } = sanitizedData;
         const purchaseDateValue =
           typeof purchaseDate === 'string' ? purchaseDate : undefined;
         const auctionDateValue =
           typeof auctionDate === 'string' ? auctionDate : undefined;
+        const leadObjectId =
+          typeof leadId === 'string' ? new Types.ObjectId(leadId) : undefined;
         const invoicePayload = {
           ...restData,
           organizationId: new Types.ObjectId(orgId),
+          ...(leadObjectId
+            ? { leadId: leadObjectId }
+            : {}),
           createdBy: new Types.ObjectId(authenticatedUser.userId),
           updatedBy: new Types.ObjectId(authenticatedUser.userId),
           __t: this.getDiscriminatorKeyValue(sanitizedData.sellerType),
@@ -92,6 +110,14 @@ export class InvoiceService {
           ...(auctionDateValue ? { auctionDate: new Date(auctionDateValue) } : {}),
         };
         const invoice = await this.invoiceRepository.create(invoicePayload);
+        const linkedLeadId = typeof leadId === 'string' ? leadId : undefined;
+        if (linkedLeadId) {
+          await this.leadService.linkInvoiceToLead(
+            linkedLeadId,
+            invoice._id.toString(),
+            authenticatedUser,
+          );
+        }
         await this.gstAuditService.logEvent({
           organizationId: orgId,
           invoiceType: InvoiceType.PURCHASE,
@@ -141,7 +167,9 @@ export class InvoiceService {
         if(!sanitizedData.invoiceId) {
           throw new BadRequestException('Invoice ID is required');
         }
-        const invoice = await this.invoiceRepository.findById(sanitizedData.invoiceId);
+        const invoice = (await this.invoiceRepository.findById(
+          sanitizedData.invoiceId,
+        )) as InvoiceDocument | null;
         if(!invoice) {
           throw new NotFoundException('Invoice not found');
         }
@@ -149,6 +177,11 @@ export class InvoiceService {
         if(invoice.status === InvoiceStatus.CONFIRMED) {
           throw new BadRequestException('other vechile exist in this invoice');
         }
+
+        await this.assertInvoiceDocumentsReadyForConfirmation(
+          invoice._id.toString(),
+          orgId,
+        );
 
         const registerationNumberExist =
           await this.vehicleInvoiceRepository.findOneByRegistrationNumber(
@@ -180,6 +213,20 @@ export class InvoiceService {
         );
         // need to update status of invocie to confirmed
         await this.updateInvoice(invoice._id.toString(), { status: InvoiceStatus.CONFIRMED }, authenticatedUser);
+        const rawInvoiceLeadId: unknown = invoice.leadId;
+        const invoiceLeadId =
+          rawInvoiceLeadId instanceof Types.ObjectId
+            ? rawInvoiceLeadId.toString()
+            : typeof rawInvoiceLeadId === 'string'
+              ? rawInvoiceLeadId
+              : undefined;
+        if (invoiceLeadId) {
+          await this.leadService.closeLeadForInvoice(
+            invoiceLeadId,
+            invoice._id.toString(),
+            authenticatedUser,
+          );
+        }
         return vechileInvoice;
       } catch (error) {
         if(error instanceof NotFoundException) {
@@ -593,7 +640,12 @@ export class InvoiceService {
     async uploadPurchaseDocuments(
       uploadDto: UploadPurchaseDocumentDto,
       files: {
-        rc?: UploadFile[];
+        rcFront?: UploadFile[];
+        rcBack?: UploadFile[];
+        aadhaarFront?: UploadFile[];
+        aadhaarBack?: UploadFile[];
+        pan?: UploadFile[];
+        bankDetail?: UploadFile[];
         ownerId?: UploadFile[];
         otherDocument?: UploadFile[];
       },
@@ -640,24 +692,42 @@ export class InvoiceService {
 
         const fileEntries: Array<{
           file: UploadFile;
-          documentType: 'rc' | 'ownerId' | 'other';
+          documentType: PurchaseDocumentType;
         }> = [];
-        const rcFile = resolveFile(files?.rc);
-        if (rcFile) {
-          fileEntries.push({ file: rcFile, documentType: 'rc' });
-        }
+        this.pushPurchaseDocument(fileEntries, resolveFile(files?.rcFront), 'rcFront');
+        this.pushPurchaseDocument(fileEntries, resolveFile(files?.rcBack), 'rcBack');
+        this.pushPurchaseDocument(
+          fileEntries,
+          resolveFile(files?.aadhaarFront),
+          'aadhaarFront',
+        );
+        this.pushPurchaseDocument(
+          fileEntries,
+          resolveFile(files?.aadhaarBack),
+          'aadhaarBack',
+        );
+        this.pushPurchaseDocument(fileEntries, resolveFile(files?.pan), 'pan');
+        this.pushPurchaseDocument(
+          fileEntries,
+          resolveFile(files?.bankDetail),
+          'bankDetail',
+        );
         const ownerIdFile = resolveFile(files?.ownerId);
         if (ownerIdFile) {
           fileEntries.push({ file: ownerIdFile, documentType: 'ownerId' });
+          fileEntries.push({ file: ownerIdFile, documentType: 'aadhaarFront' });
         }
-        const otherFile = resolveFile(files?.otherDocument);
-        if (otherFile) {
-          fileEntries.push({ file: otherFile, documentType: 'other' });
-        }
+        this.pushPurchaseDocument(
+          fileEntries,
+          resolveFile(files?.otherDocument),
+          'other',
+        );
 
         if (fileEntries.length === 0) {
           return { message: 'No documents uploaded', documents: [] };
         }
+
+        fileEntries.forEach(({ file }) => assertSupportedDocumentFile(file));
 
         const prefix = `purchase-documents/${orgId}/${uploadDto.invoiceId}`;
         const uploads = await Promise.all(
@@ -707,6 +777,104 @@ export class InvoiceService {
         invoiceId,
         orgId,
       );
+    }
+
+    private async hydrateInvoiceFromLead(
+      data: CreateInvoiceDto,
+      authenticatedUser: AuthenticatedUser,
+    ): Promise<CreateInvoiceDto> {
+      if (data.sellerType && data.sellerType !== SellerType.DIRECT) {
+        throw new BadRequestException(
+          'Lead linkage is only supported for direct seller invoices',
+        );
+      }
+
+      const lead = (await this.leadService.validateLeadForInvoiceLink(
+        data.leadId as string,
+        authenticatedUser,
+      )) as LeadDocument;
+      const leadPlaceOfSupplyState =
+        typeof lead.placeOfSupplyState === 'string'
+          ? lead.placeOfSupplyState
+          : '';
+      const leadPurchaseDate =
+        lead.purchaseDate instanceof Date
+          ? lead.purchaseDate.toISOString()
+          : '';
+      const leadPurchaseAmount =
+        typeof lead.purchaseAmount === 'number' ? lead.purchaseAmount : undefined;
+      const leadReverseChargeApplicable =
+        typeof lead.reverseChargeApplicable === 'boolean'
+          ? lead.reverseChargeApplicable
+          : false;
+      const leadSourceValue: unknown = lead.leadSource;
+      const resolvedLeadSource =
+        Object.values(LeadSource).includes(leadSourceValue as LeadSource)
+          ? (leadSourceValue as LeadSource)
+          : undefined;
+
+      return {
+        ...data,
+        sellerType: SellerType.DIRECT,
+        sellerName: data.sellerName || lead.name,
+        mobile: data.mobile || lead.mobileNumber,
+        email: data.email || lead.email,
+        aadhaarNumber: data.aadhaarNumber || lead.aadhaarNumber,
+        panNumber: data.panNumber || lead.panNumber,
+        placeOfSupplyState:
+          data.placeOfSupplyState || leadPlaceOfSupplyState,
+        purchaseAmount:
+          data.purchaseAmount ?? leadPurchaseAmount ?? data.purchaseAmount,
+        purchaseDate: data.purchaseDate || leadPurchaseDate,
+        reverseChargeApplicable:
+          data.reverseChargeApplicable ?? leadReverseChargeApplicable,
+        leadSource: data.leadSource ?? resolvedLeadSource ?? LeadSource.WEBSITE,
+      };
+    }
+
+    private pushPurchaseDocument(
+      fileEntries: Array<{
+        file: UploadFile;
+        documentType: PurchaseDocumentType;
+      }>,
+      file: UploadFile | undefined,
+      documentType: PurchaseDocumentType,
+    ) {
+      if (file) {
+        fileEntries.push({ file, documentType });
+      }
+    }
+
+    private async assertInvoiceDocumentsReadyForConfirmation(
+      invoiceId: string,
+      orgId: string,
+    ) {
+      const documents = await this.purchaseDocumentRepository.findByInvoiceAndOrg(
+        invoiceId,
+        orgId,
+      );
+      const documentTypes = new Set(
+        documents.map((document) => document.documentType),
+      );
+
+      const requiredDocs: PurchaseDocumentType[] = [
+        'rcFront',
+        'aadhaarFront',
+      ];
+      const missingDocs = requiredDocs.filter((documentType) => {
+        if (documentType === 'aadhaarFront') {
+          return !(
+            documentTypes.has('aadhaarFront') || documentTypes.has('ownerId')
+          );
+        }
+        return !documentTypes.has(documentType);
+      });
+
+      if (missingDocs.length > 0) {
+        throw new BadRequestException(
+          `Required purchase documents are missing: ${missingDocs.join(', ')}`,
+        );
+      }
     }
 
     private assertSellerTypeFields(

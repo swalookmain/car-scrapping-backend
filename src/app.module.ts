@@ -18,6 +18,7 @@ import { TaxComplianceModule } from './tax-compliance/tax-compliance.module';
 import { DamageAdjustmentsModule } from './damage-adjustments/damage-adjustments.module';
 import { ReportsModule } from './reports/reports.module';
 import { AccountingModule } from './accounting/accounting.module';
+import { LeadModule } from './lead/lead.module';
 
 @Module({
   imports: [
@@ -36,6 +37,7 @@ import { AccountingModule } from './accounting/accounting.module';
     DamageAdjustmentsModule,
     ReportsModule,
     AccountingModule,
+    LeadModule,
   ],
   controllers: [AppController],
   providers: [AppService, AuditLogInterceptor],

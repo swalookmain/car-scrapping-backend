@@ -4,7 +4,15 @@ import { Invoice } from './invoice.schema';
 import { VechileInvoice } from './vechile-invoice.schema';
 
 export type StorageProvider = 'cloudinary' | 's3';
-export type PurchaseDocumentType = 'rc' | 'ownerId' | 'other';
+export type PurchaseDocumentType =
+  | 'rcFront'
+  | 'rcBack'
+  | 'aadhaarFront'
+  | 'aadhaarBack'
+  | 'pan'
+  | 'bankDetail'
+  | 'ownerId'
+  | 'other';
 
 @Schema({ timestamps: true })
 export class PurchaseDocument extends Document {
@@ -38,7 +46,19 @@ export class PurchaseDocument extends Document {
   @Prop({ required: true, enum: ['cloudinary', 's3'] })
   provider: StorageProvider;
 
-  @Prop({ required: true, enum: ['rc', 'ownerId', 'other'] })
+  @Prop({
+    required: true,
+    enum: [
+      'rcFront',
+      'rcBack',
+      'aadhaarFront',
+      'aadhaarBack',
+      'pan',
+      'bankDetail',
+      'ownerId',
+      'other',
+    ],
+  })
   documentType: PurchaseDocumentType;
 }
 

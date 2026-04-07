@@ -20,6 +20,9 @@ export class Invoice extends Document {
   @Prop({ type: Types.ObjectId, ref: 'organizations', required: true })
   organizationId: Types.ObjectId;
 
+  @Prop({ type: Types.ObjectId, ref: 'Lead' })
+  leadId?: Types.ObjectId;
+
   @Prop()
   sellerGstin?: string;
 
