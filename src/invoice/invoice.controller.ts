@@ -37,6 +37,7 @@ import { UploadedFiles, UseInterceptors } from '@nestjs/common';
 import { memoryStorage } from 'multer';
 import type { Express } from 'express';
 import type { MulterOptions } from '@nestjs/platform-express/multer/interfaces/multer-options.interface';
+import { DOCUMENT_FILE_FILTER } from 'src/common/utils/document-upload.util';
 
 // eslint-disable-next-line @typescript-eslint/no-unsafe-call, @typescript-eslint/no-unsafe-assignment
 const uploadStorage = memoryStorage();
@@ -289,6 +290,7 @@ export class InvoiceController {
       {
         // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
         storage: uploadStorage as MulterOptions['storage'],
+        fileFilter: DOCUMENT_FILE_FILTER,
       },
     ),
   )

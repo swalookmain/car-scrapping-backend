@@ -9,6 +9,7 @@ import { WINSTON_MODULE_NEST_PROVIDER } from 'nest-winston';
 import { Types } from 'mongoose';
 import type { LoggerService } from '@nestjs/common';
 import { sanitizeObject, validateObjectId } from 'src/common/utils/security.util';
+import { assertSupportedDocumentFile } from 'src/common/utils/document-upload.util';
 import { AuthenticatedUser } from 'src/common/interface/authenticated-user.interface';
 import { CreateVechileInvoiceDto } from './dto/create-vechile-invoice.dto';
 import { InvoiceStatus } from 'src/common/enum/invoiceStatus.enum';
@@ -725,6 +726,8 @@ export class InvoiceService {
         if (fileEntries.length === 0) {
           return { message: 'No documents uploaded', documents: [] };
         }
+
+        fileEntries.forEach(({ file }) => assertSupportedDocumentFile(file));
 
         const prefix = `purchase-documents/${orgId}/${uploadDto.invoiceId}`;
         const uploads = await Promise.all(

@@ -35,6 +35,7 @@ import { LeadLookupQueryDto } from './dto/lead-lookup-query.dto';
 import { GetUser } from 'src/common/decorators/user.decorator';
 import type { AuthenticatedUser } from 'src/common/interface/authenticated-user.interface';
 import { UploadLeadDocumentDto } from './dto/upload-lead-document.dto';
+import { DOCUMENT_FILE_FILTER } from 'src/common/utils/document-upload.util';
 
 // eslint-disable-next-line @typescript-eslint/no-unsafe-call, @typescript-eslint/no-unsafe-assignment
 const uploadStorage = memoryStorage();
@@ -128,6 +129,7 @@ export class LeadController {
       {
         // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
         storage: uploadStorage as MulterOptions['storage'],
+        fileFilter: DOCUMENT_FILE_FILTER,
       },
     ),
   )

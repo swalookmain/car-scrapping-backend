@@ -21,6 +21,7 @@ import { QueryLeadsDto } from './dto/query-leads.dto';
 import { LeadLookupQueryDto } from './dto/lead-lookup-query.dto';
 import { getPagination } from 'src/common/utils/pagination.util';
 import { sanitizeObject, validateObjectId } from 'src/common/utils/security.util';
+import { assertSupportedDocumentFile } from 'src/common/utils/document-upload.util';
 import { LeadStatus } from 'src/common/enum/leadStatus.enum';
 import { LeadSource } from 'src/common/enum/leadSource.enum';
 import { Role } from 'src/common/enum/role.enum';
@@ -311,6 +312,8 @@ export class LeadService {
       if (resolvedFiles.length === 0) {
         return { message: 'No documents uploaded', documents: [] };
       }
+
+      resolvedFiles.forEach(({ file }) => assertSupportedDocumentFile(file));
 
       const prefix = `lead-documents/${orgId}/${leadId}`;
       const saved = await Promise.all(
