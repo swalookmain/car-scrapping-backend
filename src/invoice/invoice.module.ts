@@ -31,6 +31,7 @@ import { VehicleComplianceModule } from 'src/vehicle-compliance/vehicle-complian
 import { TaxComplianceModule } from 'src/tax-compliance/tax-compliance.module';
 import { AccountingModule } from 'src/accounting/accounting.module';
 import { UsersModule } from 'src/users/users.module';
+import { LeadModule } from 'src/lead/lead.module';
 
 @Module({
   imports: [
@@ -65,6 +66,7 @@ import { UsersModule } from 'src/users/users.module';
     TaxComplianceModule,
     AccountingModule,
     UsersModule,
+    LeadModule,
   ],
   controllers: [InvoiceController],
   providers: [
