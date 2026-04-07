@@ -21,7 +21,8 @@ import type { QueryDamageAdjustmentsDto } from './dto/query-damage-adjustments.d
 type DamageAdjustmentLike = {
   _id: Types.ObjectId;
   organizationId: Types.ObjectId;
-  partId: Types.ObjectId;
+  partId: Types.ObjectId | string | null;
+  partName?: string | null;
   previousCondition: Condition;
   newCondition: Condition;
   quantityAffected: number;
@@ -134,7 +135,7 @@ export class DamageAdjustmentsService {
     }
 
     const { page, limit } = getPagination(query.page, query.limit);
-    const { data, total } = await this.damageAdjustmentRepo.findPaginated(
+    const { data, total } = await this.damageAdjustmentRepo.findPaginatedWithPartNames(
       filter,
       page,
       limit,
