@@ -37,6 +37,7 @@ import { UploadedFiles, UseInterceptors } from '@nestjs/common';
 import { memoryStorage } from 'multer';
 import type { Express } from 'express';
 import type { MulterOptions } from '@nestjs/platform-express/multer/interfaces/multer-options.interface';
+import { DOCUMENT_FILE_FILTER } from 'src/common/utils/document-upload.util';
 
 // eslint-disable-next-line @typescript-eslint/no-unsafe-call, @typescript-eslint/no-unsafe-assignment
 const uploadStorage = memoryStorage();
@@ -140,6 +141,29 @@ export class InvoiceController {
     );
   }
 
+  @Get('purchase-documents')
+  @Roles(Role.ADMIN, Role.STAFF)
+  @ApiOperation({ summary: 'Get purchase documents by invoice' })
+  @ApiQuery({
+    name: 'invoiceId',
+    required: true,
+    type: String,
+    description: 'Invoice ID',
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'Purchase documents retrieved successfully',
+  })
+  getPurchaseDocuments(
+    @Query() query: QueryPurchaseDocumentDto,
+    @GetUser() authenticatedUser: AuthenticatedUser,
+  ) {
+    return this.invoiceService.getPurchaseDocuments(
+      query.invoiceId,
+      authenticatedUser,
+    );
+  }
+
   @Get(':id')
   @Roles(Role.ADMIN, Role.STAFF)
   @ApiOperation({ summary: 'Get invoice by ID' })
@@ -235,8 +259,13 @@ export class InvoiceController {
       properties: {
         invoiceId: { type: 'string' },
         vechileInvoiceId: { type: 'string' },
-        rc: { type: 'string', format: 'binary' },
-        ownerId: { type: 'string', format: 'binary' },
+        rcFront: { type: 'string', format: 'binary' },
+        rcBack: { type: 'string', format: 'binary' },
+        aadhaarFront: { type: 'string', format: 'binary' },
+        aadhaarBack: { type: 'string', format: 'binary' },
+        pan: { type: 'string', format: 'binary' },
+        bankDetail: { type: 'string', format: 'binary' },
+        ownerId: { type: 'string', format: 'binary', description: 'Backward compatible alias for aadhaar front' },
         otherDocument: { type: 'string', format: 'binary' },
       },
       required: ['invoiceId'],
@@ -249,13 +278,19 @@ export class InvoiceController {
   @UseInterceptors(
     FileFieldsInterceptor(
       [
-        { name: 'rc', maxCount: 1 },
+        { name: 'rcFront', maxCount: 1 },
+        { name: 'rcBack', maxCount: 1 },
+        { name: 'aadhaarFront', maxCount: 1 },
+        { name: 'aadhaarBack', maxCount: 1 },
+        { name: 'pan', maxCount: 1 },
+        { name: 'bankDetail', maxCount: 1 },
         { name: 'ownerId', maxCount: 1 },
         { name: 'otherDocument', maxCount: 1 },
       ],
       {
         // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
         storage: uploadStorage as MulterOptions['storage'],
+        fileFilter: DOCUMENT_FILE_FILTER,
       },
     ),
   )
@@ -263,7 +298,12 @@ export class InvoiceController {
     @Body() uploadDto: UploadPurchaseDocumentDto,
     @UploadedFiles()
     files: {
-      rc?: Express.Multer.File[];
+      rcFront?: Express.Multer.File[];
+      rcBack?: Express.Multer.File[];
+      aadhaarFront?: Express.Multer.File[];
+      aadhaarBack?: Express.Multer.File[];
+      pan?: Express.Multer.File[];
+      bankDetail?: Express.Multer.File[];
       ownerId?: Express.Multer.File[];
       otherDocument?: Express.Multer.File[];
     },
@@ -272,29 +312,6 @@ export class InvoiceController {
     return this.invoiceService.uploadPurchaseDocuments(
       uploadDto,
       files,
-      authenticatedUser,
-    );
-  }
-
-  @Get('purchase-documents')
-  @Roles(Role.ADMIN, Role.STAFF)
-  @ApiOperation({ summary: 'Get purchase documents by invoice' })
-  @ApiQuery({
-    name: 'invoiceId',
-    required: true,
-    type: String,
-    description: 'Invoice ID',
-  })
-  @ApiResponse({
-    status: 200,
-    description: 'Purchase documents retrieved successfully',
-  })
-  getPurchaseDocuments(
-    @Query() query: QueryPurchaseDocumentDto,
-    @GetUser() authenticatedUser: AuthenticatedUser,
-  ) {
-    return this.invoiceService.getPurchaseDocuments(
-      query.invoiceId,
       authenticatedUser,
     );
   }

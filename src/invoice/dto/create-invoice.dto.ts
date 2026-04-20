@@ -5,6 +5,7 @@ import {
   IsDefined,
   IsEmail,
   IsEnum,
+  IsMongoId,
   IsNumber,
   IsOptional,
   IsString,
@@ -122,4 +123,9 @@ export class CreateInvoiceDto {
   @IsEnum(InvoiceStatus)
   @IsOptional()
   status?: InvoiceStatus;
+
+  @ApiPropertyOptional({ description: 'Linked lead ID for direct purchase flow' })
+  @IsMongoId()
+  @IsOptional()
+  leadId?: string;
 }
