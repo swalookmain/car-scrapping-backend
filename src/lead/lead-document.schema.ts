@@ -2,7 +2,17 @@ import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
 import { Document, Types } from 'mongoose';
 import { Lead } from './lead.schema';
 
-export type LeadDocumentType = 'aadhaar' | 'rc' | 'pan' | 'bankDetail';
+export type LeadDocumentType =
+  | 'aadhaar'
+  | 'rc'
+  | 'pan'
+  | 'bankDetail'
+  | 'vehicleFront'
+  | 'vehicleRight'
+  | 'vehicleEngine'
+  | 'vehicleLeft'
+  | 'vehicleBack'
+  | 'vehicleInterior';
 export type LeadDocumentPageMode = 'single' | 'double';
 export type LeadDocumentPageSide = 'single' | 'front' | 'back';
 export type LeadStorageProvider = 'cloudinary' | 's3';
@@ -18,7 +28,21 @@ export class LeadDocumentRecord extends Document {
   @Prop({ type: Types.ObjectId, ref: 'User', required: true })
   uploadedBy: Types.ObjectId;
 
-  @Prop({ required: true, enum: ['aadhaar', 'rc', 'pan', 'bankDetail'] })
+  @Prop({
+    required: true,
+    enum: [
+      'aadhaar',
+      'rc',
+      'pan',
+      'bankDetail',
+      'vehicleFront',
+      'vehicleRight',
+      'vehicleEngine',
+      'vehicleLeft',
+      'vehicleBack',
+      'vehicleInterior',
+    ],
+  })
   documentType: LeadDocumentType;
 
   @Prop({ required: true, enum: ['single', 'double'] })

@@ -5,6 +5,7 @@ import {
   IsDateString,
   IsEmail,
   IsEnum,
+  IsIn,
   IsMongoId,
   IsNumber,
   IsOptional,
@@ -27,15 +28,21 @@ export class CreateLeadDto {
   @IsString()
   mobileNumber: string;
 
+  @ApiProperty()
+  @IsString()
+  location: string;
+
   @ApiPropertyOptional()
   @EmptyToUndefined()
   @IsString()
   @IsOptional()
-  location?: string;
+  ownerName?: string;
 
-  @ApiProperty({ description: 'Vehicle name for invoice lookup' })
+  @ApiPropertyOptional({ description: 'Vehicle name for invoice lookup' })
+  @EmptyToUndefined()
   @IsString()
-  vehicleName: string;
+  @IsOptional()
+  vehicleName?: string;
 
   @ApiPropertyOptional({ enum: VehicleType })
   @EmptyToUndefined()
@@ -43,9 +50,11 @@ export class CreateLeadDto {
   @IsOptional()
   vehicleType?: VehicleType;
 
-  @ApiProperty({ description: 'Wheel variant such as two wheeler, four wheeler' })
+  @ApiPropertyOptional({ description: 'Vehicle model/variant' })
+  @EmptyToUndefined()
   @IsString()
-  variant: string;
+  @IsOptional()
+  variant?: string;
 
   @ApiPropertyOptional({ enum: FuelType })
   @EmptyToUndefined()
@@ -58,6 +67,12 @@ export class CreateLeadDto {
   @IsString()
   @IsOptional()
   registrationNumber?: string;
+
+  @ApiPropertyOptional({ enum: ['WORKING', 'NOT_WORKING'] })
+  @EmptyToUndefined()
+  @IsIn(['WORKING', 'NOT_WORKING'])
+  @IsOptional()
+  vehicleWorkingCondition?: 'WORKING' | 'NOT_WORKING';
 
   @ApiPropertyOptional({ description: 'Only last 5 digits of chassis number' })
   @EmptyToUndefined()
@@ -111,7 +126,37 @@ export class CreateLeadDto {
   @EmptyToUndefined()
   @IsString()
   @IsOptional()
+  aadhaarLinkedMobileNumber?: string;
+
+  @ApiPropertyOptional()
+  @EmptyToUndefined()
+  @IsString()
+  @IsOptional()
   panNumber?: string;
+
+  @ApiPropertyOptional()
+  @EmptyToUndefined()
+  @IsString()
+  @IsOptional()
+  bankAccountNumber?: string;
+
+  @ApiPropertyOptional()
+  @EmptyToUndefined()
+  @IsString()
+  @IsOptional()
+  bankIfscCode?: string;
+
+  @ApiPropertyOptional()
+  @EmptyToUndefined()
+  @IsString()
+  @IsOptional()
+  bankBranchName?: string;
+
+  @ApiPropertyOptional()
+  @EmptyToUndefined()
+  @IsString()
+  @IsOptional()
+  bankName?: string;
 
   @ApiPropertyOptional({ enum: LeadSource })
   @EmptyToUndefined()
