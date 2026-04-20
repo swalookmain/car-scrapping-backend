@@ -1,6 +1,7 @@
 import {
   Body,
   Controller,
+  Delete,
   Get,
   Param,
   Patch,
@@ -105,15 +106,22 @@ export class LeadController {
     schema: {
       type: 'object',
       properties: {
-        pageMode: { type: 'string', enum: ['single', 'double'] },
+        aadhaarPageMode: { type: 'string', enum: ['single', 'double'] },
+        rcPageMode: { type: 'string', enum: ['single', 'double'] },
         aadhaarFront: { type: 'string', format: 'binary' },
         aadhaarBack: { type: 'string', format: 'binary' },
         rcFront: { type: 'string', format: 'binary' },
         rcBack: { type: 'string', format: 'binary' },
         pan: { type: 'string', format: 'binary' },
         bankDetail: { type: 'string', format: 'binary' },
+        vehicleFront: { type: 'string', format: 'binary' },
+        vehicleRight: { type: 'string', format: 'binary' },
+        vehicleEngine: { type: 'string', format: 'binary' },
+        vehicleLeft: { type: 'string', format: 'binary' },
+        vehicleBack: { type: 'string', format: 'binary' },
+        vehicleInterior: { type: 'string', format: 'binary' },
       },
-      required: ['pageMode'],
+      required: ['aadhaarPageMode', 'rcPageMode'],
     },
   })
   @UseInterceptors(
@@ -125,6 +133,12 @@ export class LeadController {
         { name: 'rcBack', maxCount: 1 },
         { name: 'pan', maxCount: 1 },
         { name: 'bankDetail', maxCount: 1 },
+        { name: 'vehicleFront', maxCount: 1 },
+        { name: 'vehicleRight', maxCount: 1 },
+        { name: 'vehicleEngine', maxCount: 1 },
+        { name: 'vehicleLeft', maxCount: 1 },
+        { name: 'vehicleBack', maxCount: 1 },
+        { name: 'vehicleInterior', maxCount: 1 },
       ],
       {
         // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
@@ -144,12 +158,18 @@ export class LeadController {
       rcBack?: Express.Multer.File[];
       pan?: Express.Multer.File[];
       bankDetail?: Express.Multer.File[];
+      vehicleFront?: Express.Multer.File[];
+      vehicleRight?: Express.Multer.File[];
+      vehicleEngine?: Express.Multer.File[];
+      vehicleLeft?: Express.Multer.File[];
+      vehicleBack?: Express.Multer.File[];
+      vehicleInterior?: Express.Multer.File[];
     },
     @GetUser() authenticatedUser: AuthenticatedUser,
   ) {
     return this.leadService.uploadDocuments(
       id,
-      body.pageMode,
+      body,
       files,
       authenticatedUser,
     );
@@ -200,5 +220,15 @@ export class LeadController {
       updateLeadStatusDto,
       authenticatedUser,
     );
+  }
+
+  @Delete(':id')
+  @Roles(Role.ADMIN)
+  @ApiOperation({ summary: 'Delete a lead' })
+  deleteLead(
+    @Param('id') id: string,
+    @GetUser() authenticatedUser: AuthenticatedUser,
+  ) {
+    return this.leadService.deleteLead(id, authenticatedUser);
   }
 }

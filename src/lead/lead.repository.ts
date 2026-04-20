@@ -63,13 +63,17 @@ export class LeadRepository extends BaseRepository<LeadDocument> {
 
     if (q?.trim()) {
       const expression = new RegExp(q.trim(), 'i');
-      filter.$or = [{ name: expression }, { vehicleName: expression }];
+      filter.$or = [
+        { name: expression },
+        { ownerName: expression },
+        { vehicleName: expression },
+      ];
     }
 
     return this.model
       .find(filter)
       .select(
-        'name mobileNumber vehicleName variant vehicleType fuelType assignedTo status',
+        'name ownerName mobileNumber vehicleName variant vehicleType fuelType assignedTo status',
       )
       .sort({ updatedAt: -1 })
       .limit(20)
