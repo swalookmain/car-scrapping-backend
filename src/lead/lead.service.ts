@@ -19,6 +19,7 @@ import { AssignLeadDto } from './dto/assign-lead.dto';
 import { UpdateLeadStatusDto } from './dto/update-lead-status.dto';
 import { QueryLeadsDto } from './dto/query-leads.dto';
 import { LeadLookupQueryDto } from './dto/lead-lookup-query.dto';
+import { UploadLeadDocumentDto } from './dto/upload-lead-document.dto';
 import { getPagination } from 'src/common/utils/pagination.util';
 import { sanitizeObject, validateObjectId } from 'src/common/utils/security.util';
 import { assertSupportedDocumentFile } from 'src/common/utils/document-upload.util';
@@ -106,6 +107,7 @@ export class LeadService {
         const pattern = new RegExp(query.q.trim(), 'i');
         filter.$or = [
           { name: pattern },
+          { ownerName: pattern },
           { vehicleName: pattern },
           { mobileNumber: pattern },
           { location: pattern },
@@ -243,9 +245,32 @@ export class LeadService {
     }
   }
 
+  async deleteLead(id: string, authenticatedUser: AuthenticatedUser) {
+    try {
+      this.ensureAdmin(authenticatedUser);
+      const leadId = validateObjectId(id, 'Lead ID');
+      const lead = await this.requireLead(leadId);
+      const orgId = this.getOrgId(authenticatedUser);
+      if (lead.organizationId?.toString() !== orgId) {
+        throw new ForbiddenException('Lead does not belong to organization');
+      }
+      if (lead.invoiceId) {
+        throw new BadRequestException('Cannot delete lead linked to an invoice');
+      }
+      if (lead.status === LeadStatus.CLOSED) {
+        throw new BadRequestException('Closed leads cannot be deleted');
+      }
+      await this.leadRepository.deleteById(leadId);
+      return { message: 'Lead deleted successfully' };
+    } catch (error) {
+      this.rethrowKnown(error);
+      this.logAndThrow(error, 'Failed to delete lead');
+    }
+  }
+
   async uploadDocuments(
     id: string,
-    pageMode: 'single' | 'double',
+    uploadLeadDocumentDto: UploadLeadDocumentDto,
     files: {
       aadhaarFront?: UploadFile[];
       aadhaarBack?: UploadFile[];
@@ -253,6 +278,12 @@ export class LeadService {
       rcBack?: UploadFile[];
       pan?: UploadFile[];
       bankDetail?: UploadFile[];
+      vehicleFront?: UploadFile[];
+      vehicleRight?: UploadFile[];
+      vehicleEngine?: UploadFile[];
+      vehicleLeft?: UploadFile[];
+      vehicleBack?: UploadFile[];
+      vehicleInterior?: UploadFile[];
     },
     authenticatedUser: AuthenticatedUser,
   ) {
@@ -263,9 +294,11 @@ export class LeadService {
       this.assertLeadMutable(lead);
 
       const orgId = this.getOrgId(authenticatedUser);
+      const { aadhaarPageMode, rcPageMode } = uploadLeadDocumentDto;
       const resolvedFiles: Array<{
         file: UploadFile;
         documentType: LeadDocumentType;
+        pageMode: 'single' | 'double';
         pageSide: LeadDocumentPageSide;
       }> = [];
 
@@ -273,35 +306,83 @@ export class LeadService {
         resolvedFiles,
         files.aadhaarFront?.[0],
         'aadhaar',
-        pageMode === 'double' ? 'front' : 'single',
+        aadhaarPageMode,
+        aadhaarPageMode === 'double' ? 'front' : 'single',
       );
       this.pushLeadDocument(
         resolvedFiles,
         files.aadhaarBack?.[0],
         'aadhaar',
+        aadhaarPageMode,
         'back',
       );
       this.pushLeadDocument(
         resolvedFiles,
         files.rcFront?.[0],
         'rc',
-        pageMode === 'double' ? 'front' : 'single',
+        rcPageMode,
+        rcPageMode === 'double' ? 'front' : 'single',
       );
-      this.pushLeadDocument(resolvedFiles, files.rcBack?.[0], 'rc', 'back');
-      this.pushLeadDocument(resolvedFiles, files.pan?.[0], 'pan', 'single');
+      this.pushLeadDocument(resolvedFiles, files.rcBack?.[0], 'rc', rcPageMode, 'back');
+      this.pushLeadDocument(resolvedFiles, files.pan?.[0], 'pan', 'single', 'single');
       this.pushLeadDocument(
         resolvedFiles,
         files.bankDetail?.[0],
         'bankDetail',
         'single',
+        'single',
+      );
+      this.pushLeadDocument(
+        resolvedFiles,
+        files.vehicleFront?.[0],
+        'vehicleFront',
+        'single',
+        'single',
+      );
+      this.pushLeadDocument(
+        resolvedFiles,
+        files.vehicleRight?.[0],
+        'vehicleRight',
+        'single',
+        'single',
+      );
+      this.pushLeadDocument(
+        resolvedFiles,
+        files.vehicleEngine?.[0],
+        'vehicleEngine',
+        'single',
+        'single',
+      );
+      this.pushLeadDocument(
+        resolvedFiles,
+        files.vehicleLeft?.[0],
+        'vehicleLeft',
+        'single',
+        'single',
+      );
+      this.pushLeadDocument(
+        resolvedFiles,
+        files.vehicleBack?.[0],
+        'vehicleBack',
+        'single',
+        'single',
+      );
+      this.pushLeadDocument(
+        resolvedFiles,
+        files.vehicleInterior?.[0],
+        'vehicleInterior',
+        'single',
+        'single',
       );
 
-      if (pageMode === 'double') {
+      if (aadhaarPageMode === 'double') {
         if (files.aadhaarFront?.[0] && !files.aadhaarBack?.[0]) {
           throw new BadRequestException(
             'Aadhaar back page is required for double-page upload',
           );
         }
+      }
+      if (rcPageMode === 'double') {
         if (files.rcFront?.[0] && !files.rcBack?.[0]) {
           throw new BadRequestException(
             'RC back page is required for double-page upload',
@@ -317,7 +398,7 @@ export class LeadService {
 
       const prefix = `lead-documents/${orgId}/${leadId}`;
       const saved = await Promise.all(
-        resolvedFiles.map(async ({ file, documentType, pageSide }) => {
+        resolvedFiles.map(async ({ file, documentType, pageMode, pageSide }) => {
           const upload = await this.storageService.uploadFile(file, prefix);
           return this.leadDocumentRepository.replaceDocument(
             {
@@ -510,6 +591,10 @@ export class LeadService {
     if (data.mobileNumber) {
       data.mobileNumber = data.mobileNumber.replace(/\s+/g, '');
     }
+    if (data.aadhaarLinkedMobileNumber) {
+      data.aadhaarLinkedMobileNumber =
+        data.aadhaarLinkedMobileNumber.replace(/\s+/g, '');
+    }
     if (!data.leadSource) {
       data.leadSource = LeadSource.WEBSITE;
     }
@@ -520,14 +605,16 @@ export class LeadService {
     files: Array<{
       file: UploadFile;
       documentType: LeadDocumentType;
+      pageMode: 'single' | 'double';
       pageSide: LeadDocumentPageSide;
     }>,
     file: UploadFile | undefined,
     documentType: LeadDocumentType,
+    pageMode: 'single' | 'double',
     pageSide: LeadDocumentPageSide,
   ) {
     if (file) {
-      files.push({ file, documentType, pageSide });
+      files.push({ file, documentType, pageMode, pageSide });
     }
   }
 

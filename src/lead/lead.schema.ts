@@ -13,11 +13,14 @@ export class Lead extends Document {
   @Prop({ required: true, trim: true })
   mobileNumber: string;
 
-  @Prop({ trim: true })
-  location?: string;
-
   @Prop({ required: true, trim: true })
-  vehicleName: string;
+  location: string;
+
+  @Prop({ trim: true })
+  ownerName?: string;
+
+  @Prop({ trim: true })
+  vehicleName?: string;
 
   @Prop({ enum: VehicleType })
   vehicleType?: VehicleType;
@@ -30,6 +33,9 @@ export class Lead extends Document {
 
   @Prop({ trim: true })
   registrationNumber?: string;
+
+  @Prop({ trim: true })
+  vehicleWorkingCondition?: string;
 
   @Prop({ trim: true })
   last5ChassisNumber?: string;
@@ -56,7 +62,22 @@ export class Lead extends Document {
   aadhaarNumber?: string;
 
   @Prop({ trim: true })
+  aadhaarLinkedMobileNumber?: string;
+
+  @Prop({ trim: true })
   panNumber?: string;
+
+  @Prop({ trim: true })
+  bankAccountNumber?: string;
+
+  @Prop({ trim: true })
+  bankIfscCode?: string;
+
+  @Prop({ trim: true })
+  bankBranchName?: string;
+
+  @Prop({ trim: true })
+  bankName?: string;
 
   @Prop({ enum: LeadSource })
   leadSource?: LeadSource;

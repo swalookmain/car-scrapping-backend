@@ -1,5 +1,8 @@
 export enum LeadSource {
-    WEBSITE = 'WEBSITE',
-    WORD_OF_MOUTH = 'WORD_OF_MOUTH',
-  }
+  WEBSITE = 'WEBSITE',
+  WHATSAPP = 'WHATSAPP',
+  INSTAGRAM = 'INSTAGRAM',
+  MAIN_SITE = 'MAIN_SITE',
+  OTHER = 'OTHER',
+}
   
