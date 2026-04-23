@@ -53,7 +53,8 @@ export class LeadRepository extends BaseRepository<LeadDocument> {
   ) {
     const filter: Record<string, unknown> = {
       organizationId: new Types.ObjectId(organizationId),
-      status: { $ne: 'CLOSED' },
+      status: { $nin: ['CLOSED', 'CANCELLED'] },
+      isInterested: { $ne: false },
       invoiceId: { $exists: false },
     };
 

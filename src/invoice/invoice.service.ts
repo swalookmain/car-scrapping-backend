@@ -2,6 +2,7 @@ import { BadRequestException, Inject, Injectable, NotFoundException } from '@nes
 import { CreateInvoiceDto } from './dto/create-invoice.dto';
 import { UpdateInvoiceDto } from './dto/update-invoice.dto';
 import { InvoiceRepository } from './invoice.repository';
+import { InvoiceCounterRepository } from './invoice-counter.repository';
 import { VehicleInvoiceRepository } from './vehicle-invoice.repository';
 import { PurchaseDocumentRepository } from './purchase-document.repository';
 import { OrganizationsService } from 'src/organizations/organizations.service';
@@ -37,6 +38,7 @@ import type { LeadDocument } from 'src/lead/lead.schema';
 export class InvoiceService {
     constructor(
       private readonly invoiceRepository: InvoiceRepository,
+      private readonly invoiceCounterRepository: InvoiceCounterRepository,
       private readonly vehicleInvoiceRepository: VehicleInvoiceRepository,
       private readonly purchaseDocumentRepository: PurchaseDocumentRepository,
       private readonly organizationsService: OrganizationsService,
@@ -88,6 +90,13 @@ export class InvoiceService {
           typeof leadId === 'string' ? new Types.ObjectId(leadId) : undefined;
         const invoicePayload = {
           ...restData,
+          invoiceNumber:
+            (typeof sanitizedData.invoiceNumber === 'string' &&
+              sanitizedData.invoiceNumber.trim()) ||
+            (await this.generateInvoiceNumber(
+              orgId,
+              purchaseDateValue ? new Date(purchaseDateValue) : new Date(),
+            )),
           organizationId: new Types.ObjectId(orgId),
           ...(leadObjectId
             ? { leadId: leadObjectId }
@@ -830,6 +839,26 @@ export class InvoiceService {
           data.reverseChargeApplicable ?? leadReverseChargeApplicable,
         leadSource: data.leadSource ?? resolvedLeadSource ?? LeadSource.WEBSITE,
       };
+    }
+
+    private async generateInvoiceNumber(orgId: string, purchaseDate: Date) {
+      const financialYear = this.getFinancialYear(purchaseDate);
+      const sequence = await this.invoiceCounterRepository.getNextSequence(
+        orgId,
+        financialYear,
+      );
+      const paddedSequence = String(sequence).padStart(6, '0');
+      return `INV/${financialYear}/${paddedSequence}`;
+    }
+
+    private getFinancialYear(date: Date) {
+      const year = date.getFullYear();
+      const month = date.getMonth();
+      const fyStartYear = month >= 3 ? year : year - 1;
+      const fyEndYear = fyStartYear + 1;
+      const shortStart = String(fyStartYear).slice(-2);
+      const shortEnd = String(fyEndYear).slice(-2);
+      return `${shortStart}-${shortEnd}`;
     }
 
     private pushPurchaseDocument(

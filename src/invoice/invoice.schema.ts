@@ -13,7 +13,6 @@ export class Invoice extends Document {
 
   @Prop({
     required: true,
-    default: () => `INV-${Date.now()}`,
   })
   invoiceNumber: string;
 
