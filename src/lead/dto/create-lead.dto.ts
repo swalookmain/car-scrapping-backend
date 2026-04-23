@@ -6,6 +6,8 @@ import {
   IsEmail,
   IsEnum,
   IsIn,
+  Max,
+  Min,
   IsMongoId,
   IsNumber,
   IsOptional,
@@ -18,6 +20,8 @@ import { VehicleType } from 'src/common/enum/vehicleType.enum';
 
 const EmptyToUndefined = () =>
   Transform(({ value }) => (value === '' ? undefined : value));
+const VEHICLE_NUMBER_REGEX =
+  /^(?:[A-Z]{2}[- ]?\d{1,2}[- ]?[A-Z]{1,3}[- ]?\d{4}|[0-9]{2}[- ]?BH[- ]?[0-9]{4}[- ]?[A-Z]{2})$/;
 
 export class CreateLeadDto {
   @ApiProperty()
@@ -26,6 +30,7 @@ export class CreateLeadDto {
 
   @ApiProperty()
   @IsString()
+  @Matches(/^\d{10}$/, { message: 'Mobile number must be exactly 10 digits' })
   mobileNumber: string;
 
   @ApiProperty()
@@ -65,6 +70,9 @@ export class CreateLeadDto {
   @ApiPropertyOptional()
   @EmptyToUndefined()
   @IsString()
+  @Matches(VEHICLE_NUMBER_REGEX, {
+    message: 'Registration number must be a valid Indian vehicle format',
+  })
   @IsOptional()
   registrationNumber?: string;
 
@@ -96,6 +104,8 @@ export class CreateLeadDto {
   @ApiPropertyOptional()
   @EmptyToUndefined()
   @IsNumber()
+  @Min(1900)
+  @Max(2100)
   @IsOptional()
   yearOfManufacture?: number;
 
@@ -109,6 +119,11 @@ export class CreateLeadDto {
   @IsBoolean()
   @IsOptional()
   isOwnerSelf?: boolean;
+
+  @ApiPropertyOptional({ default: true })
+  @IsBoolean()
+  @IsOptional()
+  isInterested?: boolean;
 
   @ApiPropertyOptional()
   @EmptyToUndefined()
@@ -125,6 +140,9 @@ export class CreateLeadDto {
   @ApiPropertyOptional()
   @EmptyToUndefined()
   @IsString()
+  @Matches(/^\d{10}$/, {
+    message: 'Aadhaar linked mobile number must be exactly 10 digits',
+  })
   @IsOptional()
   aadhaarLinkedMobileNumber?: string;
 

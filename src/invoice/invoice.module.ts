@@ -2,10 +2,12 @@ import { forwardRef, Module } from '@nestjs/common';
 import { MongooseModule } from '@nestjs/mongoose';
 import { InvoiceController } from './invoice.controller';
 import { InvoiceRepository } from './invoice.repository';
+import { InvoiceCounterRepository } from './invoice-counter.repository';
 import { VehicleInvoiceRepository } from './vehicle-invoice.repository';
 import { PurchaseDocumentRepository } from './purchase-document.repository';
 import { InvoiceService } from './invoice.service';
 import { Invoice, InvoiceSchema } from './invoice.schema';
+import { InvoiceCounter, InvoiceCounterSchema } from './invoice-counter.schema';
 import { VechileInvoice, VechileInvoiceSchema } from './vechile-invoice.schema';
 import {
   DirectSeller,
@@ -59,6 +61,7 @@ import { LeadModule } from 'src/lead/lead.module';
       },
       { name: VechileInvoice.name, schema: VechileInvoiceSchema },
       { name: PurchaseDocument.name, schema: PurchaseDocumentSchema },
+      { name: InvoiceCounter.name, schema: InvoiceCounterSchema },
     ]),
     OrganizationsModule,
     AuditLogModule,
@@ -72,6 +75,7 @@ import { LeadModule } from 'src/lead/lead.module';
   providers: [
     InvoiceService,
     InvoiceRepository,
+    InvoiceCounterRepository,
     VehicleInvoiceRepository,
     PurchaseDocumentRepository,
     StorageService,
@@ -79,6 +83,7 @@ import { LeadModule } from 'src/lead/lead.module';
   exports: [
     InvoiceService,
     InvoiceRepository,
+    InvoiceCounterRepository,
     VehicleInvoiceRepository,
     PurchaseDocumentRepository,
   ],

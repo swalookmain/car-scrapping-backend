@@ -66,6 +66,9 @@ export class LeadService {
 
       const createdLead = await this.leadRepository.create({
         ...restData,
+        ...(sanitizedData.isInterested === false
+          ? { status: LeadStatus.CANCELLED }
+          : {}),
         assignedTo: assignedStaffId
           ? new Types.ObjectId(assignedStaffId)
           : undefined,
@@ -178,6 +181,12 @@ export class LeadService {
 
       const updatedLead = await this.leadRepository.updateById(leadId, {
         ...sanitizedData,
+        ...(sanitizedData.isInterested === false
+          ? { status: LeadStatus.CANCELLED }
+          : {}),
+        ...(sanitizedData.isInterested === true && lead.status === LeadStatus.CANCELLED
+          ? { status: LeadStatus.OPEN }
+          : {}),
         ...(sanitizedData.purchaseDate
           ? { purchaseDate: new Date(sanitizedData.purchaseDate) }
           : {}),
@@ -460,6 +469,9 @@ export class LeadService {
     if (lead.status === LeadStatus.CLOSED || lead.invoiceId) {
       throw new BadRequestException('Lead is no longer available for invoicing');
     }
+    if (lead.status === LeadStatus.CANCELLED || lead.isInterested === false) {
+      throw new BadRequestException('Lead is marked as not interested');
+    }
     return lead;
   }
 
@@ -473,6 +485,9 @@ export class LeadService {
 
     if (lead.status === LeadStatus.CLOSED) {
       throw new BadRequestException('Closed leads cannot be linked to invoices');
+    }
+    if (lead.status === LeadStatus.CANCELLED || lead.isInterested === false) {
+      throw new BadRequestException('Not interested leads cannot be linked to invoices');
     }
     if (lead.invoiceId) {
       throw new BadRequestException('Lead is already linked to an invoice');
@@ -586,7 +601,9 @@ export class LeadService {
       data.last5ChassisNumber = data.last5ChassisNumber.toUpperCase();
     }
     if (data.registrationNumber) {
-      data.registrationNumber = data.registrationNumber.toUpperCase();
+      data.registrationNumber = data.registrationNumber
+        .toUpperCase()
+        .replace(/[\s-]+/g, '');
     }
     if (data.mobileNumber) {
       data.mobileNumber = data.mobileNumber.replace(/\s+/g, '');
@@ -594,6 +611,15 @@ export class LeadService {
     if (data.aadhaarLinkedMobileNumber) {
       data.aadhaarLinkedMobileNumber =
         data.aadhaarLinkedMobileNumber.replace(/\s+/g, '');
+    }
+    if (data.yearOfManufacture) {
+      const year = Number(data.yearOfManufacture);
+      const currentYear = new Date().getFullYear();
+      if (year < 1900 || year > currentYear + 1) {
+        throw new BadRequestException(
+          `Year of registration must be between 1900 and ${currentYear + 1}`,
+        );
+      }
     }
     if (!data.leadSource) {
       data.leadSource = LeadSource.WEBSITE;

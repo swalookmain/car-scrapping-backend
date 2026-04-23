@@ -55,6 +55,9 @@ export class Lead extends Document {
   @Prop({ type: Boolean, default: true })
   isOwnerSelf: boolean;
 
+  @Prop({ type: Boolean, default: true })
+  isInterested: boolean;
+
   @Prop({ trim: true })
   email?: string;
 
