@@ -22,6 +22,15 @@ export class Invoice extends Document {
   @Prop({ type: Types.ObjectId, ref: 'Lead' })
   leadId?: Types.ObjectId;
 
+  @Prop({ type: Types.ObjectId, ref: 'Auction' })
+  auctionId?: Types.ObjectId;
+
+  @Prop({ type: [{ type: Types.ObjectId, ref: 'AuctionLot' }], default: [] })
+  lotIds?: Types.ObjectId[];
+
+  @Prop({ type: [{ type: Types.ObjectId, ref: 'AuctionVehicle' }], default: [] })
+  vehicleIds?: Types.ObjectId[];
+
   @Prop()
   sellerGstin?: string;
 

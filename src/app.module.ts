@@ -19,6 +19,7 @@ import { DamageAdjustmentsModule } from './damage-adjustments/damage-adjustments
 import { ReportsModule } from './reports/reports.module';
 import { AccountingModule } from './accounting/accounting.module';
 import { LeadModule } from './lead/lead.module';
+import { AuctionModule } from './auction/auction.module';
 
 @Module({
   imports: [
@@ -38,6 +39,7 @@ import { LeadModule } from './lead/lead.module';
     ReportsModule,
     AccountingModule,
     LeadModule,
+    AuctionModule,
   ],
   controllers: [AppController],
   providers: [AppService, AuditLogInterceptor],

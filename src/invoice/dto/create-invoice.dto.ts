@@ -128,4 +128,19 @@ export class CreateInvoiceDto {
   @IsMongoId()
   @IsOptional()
   leadId?: string;
+
+  @ApiPropertyOptional({ description: 'Linked auction ID for MSTC flow' })
+  @ValidateIf((data: { sellerType?: SellerType }) => data.sellerType === SellerType.MSTC)
+  @IsDefined()
+  @IsMongoId()
+  @IsOptional()
+  auctionId?: string;
+
+  @ApiPropertyOptional({ type: [String], description: 'Linked lot IDs for MSTC flow' })
+  @IsOptional()
+  lotIds?: string[];
+
+  @ApiPropertyOptional({ type: [String], description: 'Linked vehicle IDs for MSTC flow' })
+  @IsOptional()
+  vehicleIds?: string[];
 }

@@ -1,0 +1,7 @@
+export enum AuctionVehicleStatus {
+  IDENTIFIED = 'IDENTIFIED',
+  PICKED = 'PICKED',
+  IN_TRANSIT = 'IN_TRANSIT',
+  RECEIVED = 'RECEIVED',
+  DISMANTLED = 'DISMANTLED',
+}
