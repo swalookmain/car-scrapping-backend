@@ -34,6 +34,7 @@ import { TaxComplianceModule } from 'src/tax-compliance/tax-compliance.module';
 import { AccountingModule } from 'src/accounting/accounting.module';
 import { UsersModule } from 'src/users/users.module';
 import { LeadModule } from 'src/lead/lead.module';
+import { AuctionModule } from 'src/auction/auction.module';
 
 @Module({
   imports: [
@@ -70,6 +71,7 @@ import { LeadModule } from 'src/lead/lead.module';
     AccountingModule,
     UsersModule,
     LeadModule,
+    forwardRef(() => AuctionModule),
   ],
   controllers: [InvoiceController],
   providers: [

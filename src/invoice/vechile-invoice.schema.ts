@@ -12,6 +12,15 @@ export class VechileInvoice extends Document {
   @Prop({ type: Types.ObjectId, ref: 'organizations', required: true })
   organizationId: Types.ObjectId;
 
+  @Prop({ type: Types.ObjectId, ref: 'Auction' })
+  auctionId?: Types.ObjectId;
+
+  @Prop({ type: Types.ObjectId, ref: 'AuctionLot' })
+  lotId?: Types.ObjectId;
+
+  @Prop({ type: Types.ObjectId, ref: 'AuctionVehicle' })
+  auctionVehicleId?: Types.ObjectId;
+
   @Prop({ type: String, required: true })
   ownerName: string;
 

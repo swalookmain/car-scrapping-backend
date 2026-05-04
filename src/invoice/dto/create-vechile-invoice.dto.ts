@@ -83,4 +83,19 @@ export class CreateVechileInvoiceDto {
   @IsEnum(VechicleStatus)
   @IsOptional()
   vechicleStatus?: VechicleStatus;
+
+  @ApiPropertyOptional()
+  @IsMongoId()
+  @IsOptional()
+  auctionId?: string;
+
+  @ApiPropertyOptional()
+  @IsMongoId()
+  @IsOptional()
+  lotId?: string;
+
+  @ApiPropertyOptional()
+  @IsMongoId()
+  @IsOptional()
+  auctionVehicleId?: string;
 }

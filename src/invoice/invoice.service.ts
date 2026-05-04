@@ -1,4 +1,10 @@
-import { BadRequestException, Inject, Injectable, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  Inject,
+  Injectable,
+  NotFoundException,
+  forwardRef,
+} from '@nestjs/common';
 import { CreateInvoiceDto } from './dto/create-invoice.dto';
 import { UpdateInvoiceDto } from './dto/update-invoice.dto';
 import { InvoiceRepository } from './invoice.repository';
@@ -33,6 +39,7 @@ import { LeadService } from 'src/lead/lead.service';
 import { PurchaseDocumentType } from './purchase-document.schema';
 import { LeadSource } from 'src/common/enum/leadSource.enum';
 import type { LeadDocument } from 'src/lead/lead.schema';
+import { AuctionService } from 'src/auction/auction.service';
 
 @Injectable()
 export class InvoiceService {
@@ -48,6 +55,8 @@ export class InvoiceService {
       private readonly gstAuditService: GstAuditService,
       private readonly ledgerService: LedgerService,
       private readonly leadService: LeadService,
+      @Inject(forwardRef(() => AuctionService))
+      private readonly auctionService: AuctionService,
       private readonly storageService: StorageService,
       @Inject(WINSTON_MODULE_NEST_PROVIDER)
       private readonly logger: LoggerService,
@@ -58,6 +67,12 @@ export class InvoiceService {
         let sanitizedData = sanitizeObject(createInvoiceDto) as CreateInvoiceDto;
         if (sanitizedData.leadId) {
           sanitizedData = await this.hydrateInvoiceFromLead(
+            sanitizedData,
+            authenticatedUser,
+          );
+        }
+        if (sanitizedData.sellerType === SellerType.MSTC && sanitizedData.auctionId) {
+          sanitizedData = await this.hydrateInvoiceFromAuction(
             sanitizedData,
             authenticatedUser,
           );
@@ -81,13 +96,22 @@ export class InvoiceService {
           orgStateCode: taxConfig.stateCode,
           placeOfSupplyState: sanitizedData.placeOfSupplyState,
         });
-        const { purchaseDate, auctionDate, leadId, ...restData } = sanitizedData;
+        const { purchaseDate, auctionDate, leadId, auctionId, lotIds, vehicleIds, ...restData } = sanitizedData;
         const purchaseDateValue =
           typeof purchaseDate === 'string' ? purchaseDate : undefined;
         const auctionDateValue =
           typeof auctionDate === 'string' ? auctionDate : undefined;
         const leadObjectId =
           typeof leadId === 'string' ? new Types.ObjectId(leadId) : undefined;
+        const auctionObjectId =
+          typeof auctionId === 'string' ? new Types.ObjectId(auctionId) : undefined;
+        const auctionIdValue = typeof auctionId === 'string' ? auctionId : undefined;
+        if (sanitizedData.sellerType === SellerType.MSTC && auctionIdValue) {
+          await this.auctionService.assertAuctionInvoiceAllowed(
+            auctionIdValue,
+            orgId,
+          );
+        }
         const invoicePayload = {
           ...restData,
           invoiceNumber:
@@ -100,6 +124,21 @@ export class InvoiceService {
           organizationId: new Types.ObjectId(orgId),
           ...(leadObjectId
             ? { leadId: leadObjectId }
+            : {}),
+          ...(auctionObjectId ? { auctionId: auctionObjectId } : {}),
+          ...(Array.isArray(lotIds)
+            ? {
+                lotIds: lotIds
+                  .filter((id) => typeof id === 'string')
+                  .map((id) => new Types.ObjectId(id)),
+              }
+            : {}),
+          ...(Array.isArray(vehicleIds)
+            ? {
+                vehicleIds: vehicleIds
+                  .filter((id) => typeof id === 'string')
+                  .map((id) => new Types.ObjectId(id)),
+              }
             : {}),
           createdBy: new Types.ObjectId(authenticatedUser.userId),
           updatedBy: new Types.ObjectId(authenticatedUser.userId),
@@ -183,7 +222,10 @@ export class InvoiceService {
           throw new NotFoundException('Invoice not found');
         }
 
-        if(invoice.status === InvoiceStatus.CONFIRMED) {
+        if (
+          invoice.status === InvoiceStatus.CONFIRMED &&
+          invoice.sellerType !== SellerType.MSTC
+        ) {
           throw new BadRequestException('other vechile exist in this invoice');
         }
 
@@ -204,6 +246,17 @@ export class InvoiceService {
           ...restData,
           ...(typeof model === 'string' ? { model_name: model } : {}),
         } as Record<string, unknown>;
+        if (typeof normalizedData.auctionId === 'string') {
+          normalizedData.auctionId = new Types.ObjectId(normalizedData.auctionId);
+        }
+        if (typeof normalizedData.lotId === 'string') {
+          normalizedData.lotId = new Types.ObjectId(normalizedData.lotId);
+        }
+        if (typeof normalizedData.auctionVehicleId === 'string') {
+          normalizedData.auctionVehicleId = new Types.ObjectId(
+            normalizedData.auctionVehicleId,
+          );
+        }
         const vehiclePurchaseDateValue =
           typeof normalizedData.vehicle_purchase_date === 'string'
             ? normalizedData.vehicle_purchase_date
@@ -841,6 +894,81 @@ export class InvoiceService {
       };
     }
 
+    private async hydrateInvoiceFromAuction(
+      data: CreateInvoiceDto,
+      authenticatedUser: AuthenticatedUser,
+    ): Promise<CreateInvoiceDto> {
+      const rawData = data as unknown as Record<string, unknown>;
+      const auctionIdValue =
+        typeof rawData.auctionId === 'string' ? rawData.auctionId : undefined;
+      if (!auctionIdValue || data.sellerType !== SellerType.MSTC) {
+        return data;
+      }
+      const lotIds = Array.isArray(rawData.lotIds)
+        ? rawData.lotIds.filter((value): value is string => typeof value === 'string')
+        : [];
+      const vehicleIds = Array.isArray(rawData.vehicleIds)
+        ? rawData.vehicleIds.filter((value): value is string => typeof value === 'string')
+        : [];
+      type LookupLot = { _id?: Types.ObjectId; id?: string; lotNumber?: string; awardedAmount?: number };
+      type LookupVehicle = { _id?: Types.ObjectId; id?: string };
+      type AuctionLookupResult = {
+        sellerEntityName?: string;
+        auctionNumber?: string;
+        auctionDate?: string | Date;
+        sourcePlatform?: string;
+        lots?: LookupLot[];
+        vehicles?: LookupVehicle[];
+      };
+      const auction = (await this.auctionService.getLookupById(
+        auctionIdValue,
+        authenticatedUser,
+      )) as AuctionLookupResult;
+      const lots: LookupLot[] = Array.isArray(auction.lots) ? auction.lots : [];
+      const vehicles: LookupVehicle[] = Array.isArray(auction.vehicles)
+        ? auction.vehicles
+        : [];
+      return {
+        ...data,
+        sellerType: SellerType.MSTC,
+        sellerName: data.sellerName || auction.sellerEntityName || 'MSTC',
+        auctionNumber: data.auctionNumber || auction.auctionNumber,
+        auctionDate:
+          data.auctionDate ||
+          (auction.auctionDate ? new Date(auction.auctionDate).toISOString() : undefined),
+        source: data.source || auction.sourcePlatform || 'MSTC',
+        lotNumber:
+          data.lotNumber ||
+          lots
+            .map((lot: { lotNumber?: string }) => lot.lotNumber)
+            .filter(Boolean)
+            .join(', '),
+        lotIds:
+          lotIds.length > 0
+            ? lotIds
+            : lots
+                .map((lot: { _id?: Types.ObjectId; id?: string }) =>
+                  lot._id ? lot._id.toString() : lot.id,
+                )
+                .filter(Boolean) as string[],
+        vehicleIds:
+          vehicleIds.length > 0
+            ? vehicleIds
+            : vehicles
+                .map((vehicle: { _id?: Types.ObjectId; id?: string }) =>
+                  vehicle._id ? vehicle._id.toString() : vehicle.id,
+                )
+                .filter(Boolean) as string[],
+        purchaseAmount:
+          data.purchaseAmount ??
+          lots.reduce(
+            (acc: number, lot: { awardedAmount?: number }) =>
+              acc + (lot.awardedAmount || 0),
+            0,
+          ),
+      };
+    }
+
     private async generateInvoiceNumber(orgId: string, purchaseDate: Date) {
       const financialYear = this.getFinancialYear(purchaseDate);
       const sequence = await this.invoiceCounterRepository.getNextSequence(
@@ -919,6 +1047,7 @@ export class InvoiceService {
           'leadSource',
         ],
         [SellerType.MSTC]: [
+          'auctionId',
           'auctionNumber',
           'auctionDate',
           'source',
@@ -949,7 +1078,7 @@ export class InvoiceService {
         'panNumber',
         'leadSource',
       ];
-      const mstcFields = ['auctionNumber', 'auctionDate', 'source', 'lotNumber'];
+      const mstcFields = ['auctionId', 'auctionNumber', 'auctionDate', 'source', 'lotNumber'];
 
       if (sellerType === SellerType.DIRECT) {
         return mstcFields.reduce<Record<string, ''>>((acc, field) => {

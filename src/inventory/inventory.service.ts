@@ -107,6 +107,13 @@ export class InventoryService {
         return {
           invoiceId: new Types.ObjectId(invoiceId),
           vechileId: new Types.ObjectId(vechileId),
+          auctionId:
+            (vechileInvoice as { auctionId?: Types.ObjectId }).auctionId ||
+            undefined,
+          lotId: (vechileInvoice as { lotId?: Types.ObjectId }).lotId || undefined,
+          auctionVehicleId:
+            (vechileInvoice as { auctionVehicleId?: Types.ObjectId })
+              .auctionVehicleId || undefined,
           purchaseInvoiceNumber: invoice.invoiceNumber,
           vechileModel,
           partName: part.partName,

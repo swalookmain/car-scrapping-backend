@@ -42,6 +42,15 @@ export class Inventory extends Document {
   @Prop({ type: Types.ObjectId, ref: 'VechileInvoice', required: true })
   vechileId: Types.ObjectId;
 
+  @Prop({ type: Types.ObjectId, ref: 'Auction' })
+  auctionId?: Types.ObjectId;
+
+  @Prop({ type: Types.ObjectId, ref: 'AuctionLot' })
+  lotId?: Types.ObjectId;
+
+  @Prop({ type: Types.ObjectId, ref: 'AuctionVehicle' })
+  auctionVehicleId?: Types.ObjectId;
+
   @Prop({ type: String, required: true })
   partName: string;
 

@@ -135,4 +135,11 @@ export class InvoiceRepository extends BaseRepository<InvoiceDocument> {
       rcmAmount: row?.rcmAmount ?? 0,
     };
   }
+
+  async updateManyByFilter(
+    filter: Record<string, unknown>,
+    update: Record<string, unknown>,
+  ) {
+    return this.model.updateMany(filter, update).exec();
+  }
 }
