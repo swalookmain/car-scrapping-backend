@@ -111,6 +111,21 @@ export class AuctionController {
     return this.auctionService.closeDeal(id, authenticatedUser);
   }
 
+  @Patch(':id/status')
+  @Roles(Role.ADMIN, Role.STAFF)
+  updateAuctionStatus(
+    @Param('id') id: string,
+    @Body() body: { status: AuctionStatus; dealDoneAt?: string },
+    @GetUser() authenticatedUser: AuthenticatedUser,
+  ) {
+    return this.auctionService.updateAuctionStatus(
+      id,
+      body.status,
+      body.dealDoneAt,
+      authenticatedUser,
+    );
+  }
+
   @Post(':id/cancel')
   @Roles(Role.ADMIN, Role.STAFF)
   cancelAuction(

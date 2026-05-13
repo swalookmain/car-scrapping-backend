@@ -13,6 +13,7 @@ import { InvoiceService } from './invoice.service';
 import { CreateInvoiceDto } from './dto/create-invoice.dto';
 import { UpdateInvoiceDto } from './dto/update-invoice.dto';
 import { CreateVechileInvoiceDto } from './dto/create-vechile-invoice.dto';
+import { CreateVechileInvoiceBatchDto } from './dto/create-vechile-invoice-batch.dto';
 import { UpdateVechileInvoiceDto } from './dto/update-vechile-invoice.dto';
 import { jwtAuthGuard } from 'src/common/guards/jwt-auth.guard';
 import { RolesGuard } from 'src/common/guards/roles.guard';
@@ -75,6 +76,24 @@ export class InvoiceController {
       createVechileInvoiceDto,
       authenticatedUser,
     );
+  }
+
+  @Post('vechile/batch')
+  @Roles(Role.ADMIN, Role.STAFF)
+  @ApiOperation({ summary: 'Create multiple vechile invoices for an invoice' })
+  @ApiResponse({
+    status: 201,
+    description: 'Vehicle invoices created successfully',
+  })
+  createVechileInvoicesBatch(
+    @Body() createVechileInvoiceBatchDto: CreateVechileInvoiceBatchDto,
+    @GetUser() authenticatedUser: AuthenticatedUser,
+  ) {
+    const result = this.invoiceService.createVechileInvoicesBatch(
+      createVechileInvoiceBatchDto,
+      authenticatedUser,
+    );
+    return result as Promise<{ message: string; count: number; data: unknown[] }>;
   }
 
   @Get()

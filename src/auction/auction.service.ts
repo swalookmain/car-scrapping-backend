@@ -50,16 +50,16 @@ export class AuctionService {
     startDateTime: Date;
     endDateTime: Date;
     cancelledAt?: Date;
-    dealClosedAt?: Date;
+    dealDoneAt?: Date;
   }) {
     if (auction.cancelledAt) return AuctionStatus.CANCELLED;
-    if (auction.dealClosedAt) return AuctionStatus.DEAL_CLOSED;
+    if (auction.dealDoneAt) return AuctionStatus.DEAL_DONE;
     const now = new Date();
     if (now < auction.startDateTime) return AuctionStatus.UPCOMING;
     if (now >= auction.startDateTime && now <= auction.endDateTime) {
       return AuctionStatus.ONGOING;
     }
-    return AuctionStatus.ENDED_PENDING_DECISION;
+    return AuctionStatus.STA;
   }
 
   private getFinancialYear(date: Date) {
@@ -97,6 +97,22 @@ export class AuctionService {
         };
       })
       .filter((officer) => officer.name);
+  }
+
+  private normalizeAuctionerName(value?: string) {
+    const normalized = (value || 'MSTC').toUpperCase().trim();
+    return normalized === 'GEM' ? 'GEM' : 'MSTC';
+  }
+
+  private normalizeSellerInfo(data: Partial<CreateAuctionDto>) {
+    const sellerAccountNumber = data.sellerAccountNumber?.trim() || undefined;
+    return {
+      sellerName: data.sellerName?.trim() || undefined,
+      sellerMobileNumber: data.sellerMobileNumber?.replace(/\D/g, '') || undefined,
+      sellerEmail: data.sellerEmail?.trim() || undefined,
+      sellerAccountNumber,
+      sellerTaxMode: data.sellerTaxMode || (sellerAccountNumber ? 'FCM' : 'RCM'),
+    };
   }
 
   /** Indian plate: same rules whether sent as vehicleNumber or registrationNumber (lead module uses one field). */
@@ -153,14 +169,48 @@ export class AuctionService {
     if (endDateTime <= startDateTime) {
       throw new BadRequestException('End time must be after start time');
     }
+    const inspectionFromDate = sanitizedData.inspectionFromDate
+      ? new Date(sanitizedData.inspectionFromDate)
+      : undefined;
+    const inspectionToDate = sanitizedData.inspectionToDate
+      ? new Date(sanitizedData.inspectionToDate)
+      : undefined;
+    if (
+      inspectionFromDate &&
+      inspectionToDate &&
+      inspectionToDate < inspectionFromDate
+    ) {
+      throw new BadRequestException(
+        'Inspection to date must be after inspection from date',
+      );
+    }
     const officers = this.normalizeOfficers(sanitizedData.officers);
+    const sellerInfo = this.normalizeSellerInfo(sanitizedData);
     return this.auctionRepository.create({
-      ...sanitizedData,
+      sourcePlatform:
+        sanitizedData.sourcePlatform ||
+        this.normalizeAuctionerName(sanitizedData.auctionerName),
+      auctionNumber: sanitizedData.auctionNumber,
+      sellerEntityName: sanitizedData.sellerEntityName,
+      sellerEntityCode: sanitizedData.sellerEntityCode,
+      state: sanitizedData.state,
+      city: sanitizedData.city,
+      emdAmount: sanitizedData.emdAmount,
+      emdReference: sanitizedData.emdReference,
+      remarks: sanitizedData.remarks,
       auctionLocation: sanitizedData.auctionLocation || sanitizedData.yardLocation,
+      vehicleLocation:
+        sanitizedData.vehicleLocation ||
+        sanitizedData.auctionLocation ||
+        sanitizedData.yardLocation,
+      auctionerName: this.normalizeAuctionerName(sanitizedData.auctionerName),
       officers,
+      ...sellerInfo,
       auctionDate,
       startDateTime,
       endDateTime,
+      ...(inspectionFromDate ? { inspectionFromDate } : {}),
+      ...(inspectionToDate ? { inspectionToDate } : {}),
       bidSubmissionDeadline: sanitizedData.bidSubmissionDeadline
         ? new Date(sanitizedData.bidSubmissionDeadline)
         : undefined,
@@ -235,20 +285,48 @@ export class AuctionService {
     if (endDateTime <= startDateTime) {
       throw new BadRequestException('End time must be after start time');
     }
+    const inspectionFromDate = sanitized.inspectionFromDate
+      ? new Date(sanitized.inspectionFromDate)
+      : auction.inspectionFromDate;
+    const inspectionToDate = sanitized.inspectionToDate
+      ? new Date(sanitized.inspectionToDate)
+      : auction.inspectionToDate;
+    if (inspectionFromDate && inspectionToDate && inspectionToDate < inspectionFromDate) {
+      throw new BadRequestException(
+        'Inspection to date must be after inspection from date',
+      );
+    }
     const nextStatus =
-      auction.cancelledAt || auction.dealClosedAt
+      auction.cancelledAt || auction.dealDoneAt
         ? auction.status
         : this.getAuctionStatus({ startDateTime, endDateTime });
+    const sellerInfo = this.normalizeSellerInfo(sanitized);
 
     return this.auctionRepository.updateById(auctionId, {
       ...sanitized,
       ...(sanitized.auctionLocation || sanitized.yardLocation
         ? { auctionLocation: sanitized.auctionLocation || sanitized.yardLocation }
         : {}),
+      ...(sanitized.vehicleLocation ||
+      sanitized.auctionLocation ||
+      sanitized.yardLocation
+        ? {
+            vehicleLocation:
+              sanitized.vehicleLocation ||
+              sanitized.auctionLocation ||
+              sanitized.yardLocation,
+          }
+        : {}),
+      ...(sanitized.auctionerName
+        ? { auctionerName: this.normalizeAuctionerName(sanitized.auctionerName) }
+        : {}),
+      ...sellerInfo,
       ...(sanitized.officers ? { officers: this.normalizeOfficers(sanitized.officers) } : {}),
       ...(sanitized.auctionDate ? { auctionDate: new Date(sanitized.auctionDate) } : {}),
       ...(sanitized.startDateTime ? { startDateTime } : {}),
       ...(sanitized.endDateTime ? { endDateTime } : {}),
+      ...(sanitized.inspectionFromDate ? { inspectionFromDate } : {}),
+      ...(sanitized.inspectionToDate ? { inspectionToDate } : {}),
       ...(sanitized.bidSubmissionDeadline
         ? { bidSubmissionDeadline: new Date(sanitized.bidSubmissionDeadline) }
         : {}),
@@ -267,8 +345,32 @@ export class AuctionService {
       throw new BadRequestException('Cancelled auction cannot be closed');
     }
     return this.auctionRepository.updateById(auctionId, {
-      status: AuctionStatus.DEAL_CLOSED,
-      dealClosedAt: new Date(),
+      status: AuctionStatus.DEAL_DONE,
+      dealDoneAt: new Date(),
+      updatedBy: new Types.ObjectId(authenticatedUser.userId),
+    });
+  }
+
+  async updateAuctionStatus(
+    id: string,
+    status: AuctionStatus,
+    dealDoneAt: string | undefined,
+    authenticatedUser: AuthenticatedUser,
+  ) {
+    const orgId = this.getOrgId(authenticatedUser);
+    const auctionId = validateObjectId(id, 'Auction ID');
+    const auction = await this.auctionRepository.findByOrgAndId(orgId, auctionId);
+    if (!auction) throw new NotFoundException('Auction not found');
+    await this.assertAuctionEditable(auctionId, orgId);
+    if (status === AuctionStatus.DEAL_DONE && !dealDoneAt) {
+      throw new BadRequestException('Deal done date and time is required');
+    }
+    return this.auctionRepository.updateById(auctionId, {
+      status,
+      ...(status === AuctionStatus.DEAL_DONE
+        ? { dealDoneAt: new Date(dealDoneAt as string), dealClosedAt: undefined }
+        : {}),
+      ...(status !== AuctionStatus.DEAL_DONE ? { dealDoneAt: undefined } : {}),
       updatedBy: new Types.ObjectId(authenticatedUser.userId),
     });
   }
@@ -304,9 +406,6 @@ export class AuctionService {
     );
     if (!auction) throw new NotFoundException('Auction not found');
     await this.assertAuctionEditable(validatedAuctionId, orgId);
-    if (auction.status !== AuctionStatus.DEAL_CLOSED) {
-      throw new BadRequestException('Lots can be added only after deal is closed');
-    }
     const sanitized = sanitizeObject(createAuctionLotDto) as CreateAuctionLotDto;
     const lot = await this.auctionLotRepository.create({
       lotName: sanitized.lotName,
@@ -559,7 +658,7 @@ export class AuctionService {
     const orgId = this.getOrgId(authenticatedUser);
     const auctions = await this.auctionRepository.findAllByFilter({
       organizationId: new Types.ObjectId(orgId),
-      status: AuctionStatus.DEAL_CLOSED,
+      status: AuctionStatus.DEAL_DONE,
     });
     return auctions;
   }
@@ -708,10 +807,19 @@ export class AuctionService {
     );
   }
 
-  private getMissingAuctionFields(auction: { officers?: unknown[]; auctionLocation?: string }) {
+  private getMissingAuctionFields(auction: {
+    officers?: unknown[];
+    auctionLocation?: string;
+    vehicleLocation?: string;
+    sellerName?: string;
+    sellerMobileNumber?: string;
+  }) {
     const missing: string[] = [];
     const officers = Array.isArray(auction.officers) ? auction.officers : [];
-    if (!auction.auctionLocation) missing.push('auctionLocation');
+    if (!(auction.vehicleLocation || auction.auctionLocation))
+      missing.push('vehicleLocation');
+    if (!auction.sellerName) missing.push('sellerName');
+    if (!auction.sellerMobileNumber) missing.push('sellerMobileNumber');
     if (officers.length === 0) missing.push('officers');
     return missing;
   }

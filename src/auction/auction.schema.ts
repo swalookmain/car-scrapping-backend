@@ -22,6 +22,9 @@ export class Auction extends Document {
   @Prop({ required: true, trim: true, default: 'MSTC' })
   sourcePlatform: string;
 
+  @Prop({ required: true, trim: true, default: 'MSTC' })
+  auctionerName: string;
+
   @Prop({ required: true, trim: true })
   auctionNumber: string;
 
@@ -35,6 +38,12 @@ export class Auction extends Document {
   endDateTime: Date;
 
   @Prop({ type: Date })
+  inspectionFromDate?: Date;
+
+  @Prop({ type: Date })
+  inspectionToDate?: Date;
+
+  @Prop({ type: Date })
   bidSubmissionDeadline?: Date;
 
   @Prop({ enum: AuctionStatus, default: AuctionStatus.UPCOMING })
@@ -42,6 +51,9 @@ export class Auction extends Document {
 
   @Prop({ type: Date })
   dealClosedAt?: Date;
+
+  @Prop({ type: Date })
+  dealDoneAt?: Date;
 
   @Prop({ type: Date })
   cancelledAt?: Date;
@@ -57,6 +69,24 @@ export class Auction extends Document {
 
   @Prop({ trim: true })
   auctionLocation?: string;
+
+  @Prop({ trim: true })
+  vehicleLocation?: string;
+
+  @Prop({ trim: true })
+  sellerName?: string;
+
+  @Prop({ trim: true })
+  sellerMobileNumber?: string;
+
+  @Prop({ trim: true })
+  sellerEmail?: string;
+
+  @Prop({ trim: true })
+  sellerAccountNumber?: string;
+
+  @Prop({ trim: true, enum: ['FCM', 'RCM'] })
+  sellerTaxMode?: 'FCM' | 'RCM';
 
   @Prop({ trim: true })
   state?: string;

@@ -16,13 +16,34 @@ export class VehicleInvoiceRepository extends BaseRepository<VechileInvoiceDocum
     super(vehicleInvoiceModel);
   }
 
-  findOneByRegistrationNumber(registrationNumber: string) {
+  findOneByRegistrationNumber(
+    registrationNumber: string,
+    organizationId?: string,
+  ) {
     return this.model.findOne({
       registration_number: registrationNumber,
+      isDeleted: { $ne: true },
+      ...(organizationId
+        ? { organizationId: new Types.ObjectId(organizationId) }
+        : {}),
     });
   }
 
   deleteManyByInvoiceId(invoiceId: string) {
     return this.model.deleteMany({ invoiceId: new Types.ObjectId(invoiceId) });
+  }
+
+  softDeleteManyByInvoiceId(invoiceId: string, deletedBy: string) {
+    return this.model.updateMany(
+      {
+        invoiceId: new Types.ObjectId(invoiceId),
+        isDeleted: { $ne: true },
+      },
+      {
+        isDeleted: true,
+        deletedAt: new Date(),
+        deletedBy: new Types.ObjectId(deletedBy),
+      },
+    );
   }
 }
