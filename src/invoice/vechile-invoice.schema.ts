@@ -72,6 +72,15 @@ export class VechileInvoice extends Document {
 
   @Prop({ type: String, required: true })
   rto_district_branch: string;
+
+  @Prop({ type: Boolean, default: false })
+  isDeleted?: boolean;
+
+  @Prop({ type: Date })
+  deletedAt?: Date;
+
+  @Prop({ type: Types.ObjectId, ref: 'User' })
+  deletedBy?: Types.ObjectId;
 }
 export type VechileInvoiceDocument = VechileInvoice & Document;
 export const VechileInvoiceSchema = SchemaFactory.createForClass(VechileInvoice);

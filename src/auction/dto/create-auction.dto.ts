@@ -8,6 +8,7 @@ import {
   IsOptional,
   IsString,
   Matches,
+  IsIn,
   ValidateNested,
 } from 'class-validator';
 
@@ -30,6 +31,12 @@ export class AuctionOfficerDto {
 }
 
 export class CreateAuctionDto {
+  @ApiPropertyOptional({ enum: ['MSTC', 'GEM'], default: 'MSTC' })
+  @IsString()
+  @IsIn(['MSTC', 'GEM'])
+  @IsOptional()
+  auctionerName?: string;
+
   @ApiProperty()
   @IsString()
   auctionNumber: string;
@@ -45,6 +52,16 @@ export class CreateAuctionDto {
   @ApiProperty()
   @IsDateString()
   endDateTime: string;
+
+  @ApiPropertyOptional()
+  @IsDateString()
+  @IsOptional()
+  inspectionFromDate?: string;
+
+  @ApiPropertyOptional()
+  @IsDateString()
+  @IsOptional()
+  inspectionToDate?: string;
 
   @ApiPropertyOptional()
   @IsDateString()
@@ -70,6 +87,43 @@ export class CreateAuctionDto {
   @IsString()
   @IsOptional()
   auctionLocation?: string;
+
+  @ApiPropertyOptional()
+  @IsString()
+  @IsOptional()
+  vehicleLocation?: string;
+
+  @ApiProperty()
+  @IsString()
+  sellerName: string;
+
+  @ApiProperty()
+  @Transform(({ value }) =>
+    value === '' || value === null || value === undefined
+      ? undefined
+      : String(value).replace(/\D/g, ''),
+  )
+  @Matches(/^\d{10}$/, { message: 'Seller mobile number must be exactly 10 digits' })
+  sellerMobileNumber: string;
+
+  @ApiPropertyOptional()
+  @Transform(({ value }) =>
+    value === '' || value === null || value === undefined ? undefined : value,
+  )
+  @IsOptional()
+  @IsEmail()
+  sellerEmail?: string;
+
+  @ApiPropertyOptional()
+  @IsString()
+  @IsOptional()
+  sellerAccountNumber?: string;
+
+  @ApiPropertyOptional({ enum: ['FCM', 'RCM'] })
+  @IsString()
+  @IsIn(['FCM', 'RCM'])
+  @IsOptional()
+  sellerTaxMode?: 'FCM' | 'RCM';
 
   @ApiPropertyOptional({ deprecated: true })
   @IsString()
