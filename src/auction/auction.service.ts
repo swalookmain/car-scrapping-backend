@@ -1,7 +1,9 @@
 import {
   BadRequestException,
   Injectable,
+  Logger,
   NotFoundException,
+  OnModuleInit,
 } from '@nestjs/common';
 import { Types } from 'mongoose';
 import { AuthenticatedUser } from 'src/common/interface/authenticated-user.interface';
@@ -28,7 +30,9 @@ import { CreateAuctionVehicleBatchDto } from './dto/create-auction-vehicle.dto';
 import { AuctionVehicleImageType } from './auction-vehicle-document.schema';
 
 @Injectable()
-export class AuctionService {
+export class AuctionService implements OnModuleInit {
+  private readonly logger = new Logger(AuctionService.name);
+
   constructor(
     private readonly auctionRepository: AuctionRepository,
     private readonly auctionLotRepository: AuctionLotRepository,
@@ -38,6 +42,22 @@ export class AuctionService {
     private readonly auctionVehicleDocumentRepository: AuctionVehicleDocumentRepository,
     private readonly storageService: StorageService,
   ) {}
+
+  async onModuleInit() {
+    try {
+      const droppedIndexes =
+        await this.auctionRepository.dropLegacyAuctionCodeIndexes();
+      if (droppedIndexes.length > 0) {
+        this.logger.warn(
+          `Dropped legacy auction indexes: ${droppedIndexes.join(', ')}`,
+        );
+      }
+    } catch (error) {
+      const message =
+        error instanceof Error ? error.message : 'Unknown legacy index cleanup error';
+      this.logger.error(`Failed to clean legacy auction indexes: ${message}`);
+    }
+  }
 
   private getOrgId(authenticatedUser: AuthenticatedUser) {
     if (!authenticatedUser.orgId) {
@@ -161,67 +181,86 @@ export class AuctionService {
     createAuctionDto: CreateAuctionDto,
     authenticatedUser: AuthenticatedUser,
   ) {
-    const sanitizedData = sanitizeObject(createAuctionDto) as CreateAuctionDto;
-    const orgId = this.getOrgId(authenticatedUser);
-    const auctionDate = new Date(sanitizedData.auctionDate);
-    const startDateTime = new Date(sanitizedData.startDateTime);
-    const endDateTime = new Date(sanitizedData.endDateTime);
-    if (endDateTime <= startDateTime) {
-      throw new BadRequestException('End time must be after start time');
+    try {
+      const sanitizedData = sanitizeObject(createAuctionDto) as CreateAuctionDto;
+      const orgId = this.getOrgId(authenticatedUser);
+      const auctionDate = new Date(sanitizedData.auctionDate);
+      const startDateTime = new Date(sanitizedData.startDateTime);
+      const endDateTime = new Date(sanitizedData.endDateTime);
+      if (endDateTime <= startDateTime) {
+        throw new BadRequestException('End time must be after start time');
+      }
+      const inspectionFromDate = sanitizedData.inspectionFromDate
+        ? new Date(sanitizedData.inspectionFromDate)
+        : undefined;
+      const inspectionToDate = sanitizedData.inspectionToDate
+        ? new Date(sanitizedData.inspectionToDate)
+        : undefined;
+      if (
+        inspectionFromDate &&
+        inspectionToDate &&
+        inspectionToDate < inspectionFromDate
+      ) {
+        throw new BadRequestException(
+          'Inspection to date must be after inspection from date',
+        );
+      }
+      const officers = this.normalizeOfficers(sanitizedData.officers);
+      const sellerInfo = this.normalizeSellerInfo(sanitizedData);
+      return await this.auctionRepository.create({
+        sourcePlatform:
+          sanitizedData.sourcePlatform ||
+          this.normalizeAuctionerName(sanitizedData.auctionerName),
+        auctionNumber: sanitizedData.auctionNumber,
+        sellerEntityName: sanitizedData.sellerEntityName,
+        sellerEntityCode: sanitizedData.sellerEntityCode,
+        state: sanitizedData.state,
+        city: sanitizedData.city,
+        emdAmount: sanitizedData.emdAmount,
+        emdReference: sanitizedData.emdReference,
+        remarks: sanitizedData.remarks,
+        auctionLocation: sanitizedData.auctionLocation || sanitizedData.yardLocation,
+        vehicleLocation:
+          sanitizedData.vehicleLocation ||
+          sanitizedData.auctionLocation ||
+          sanitizedData.yardLocation,
+        auctionerName: this.normalizeAuctionerName(sanitizedData.auctionerName),
+        officers,
+        ...sellerInfo,
+        auctionDate,
+        startDateTime,
+        endDateTime,
+        ...(inspectionFromDate ? { inspectionFromDate } : {}),
+        ...(inspectionToDate ? { inspectionToDate } : {}),
+        bidSubmissionDeadline: sanitizedData.bidSubmissionDeadline
+          ? new Date(sanitizedData.bidSubmissionDeadline)
+          : undefined,
+        emdPaidOn: sanitizedData.emdPaidOn
+          ? new Date(sanitizedData.emdPaidOn)
+          : undefined,
+        status: this.getAuctionStatus({ startDateTime, endDateTime }),
+        organizationId: new Types.ObjectId(orgId),
+        createdBy: new Types.ObjectId(authenticatedUser.userId),
+        updatedBy: new Types.ObjectId(authenticatedUser.userId),
+      });
+    } catch (error) {
+      if (error instanceof BadRequestException) {
+        throw error;
+      }
+      const message =
+        error instanceof Error ? error.message : 'Unknown auction create error';
+      if (message.includes('auctionNumber')) {
+        throw new BadRequestException(
+          'Auction number already exists for this organization',
+        );
+      }
+      if (message.includes('auctionCode')) {
+        throw new BadRequestException(
+          'Legacy auction code index blocked creation. Please retry; startup cleanup should remove it.',
+        );
+      }
+      throw error;
     }
-    const inspectionFromDate = sanitizedData.inspectionFromDate
-      ? new Date(sanitizedData.inspectionFromDate)
-      : undefined;
-    const inspectionToDate = sanitizedData.inspectionToDate
-      ? new Date(sanitizedData.inspectionToDate)
-      : undefined;
-    if (
-      inspectionFromDate &&
-      inspectionToDate &&
-      inspectionToDate < inspectionFromDate
-    ) {
-      throw new BadRequestException(
-        'Inspection to date must be after inspection from date',
-      );
-    }
-    const officers = this.normalizeOfficers(sanitizedData.officers);
-    const sellerInfo = this.normalizeSellerInfo(sanitizedData);
-    return this.auctionRepository.create({
-      sourcePlatform:
-        sanitizedData.sourcePlatform ||
-        this.normalizeAuctionerName(sanitizedData.auctionerName),
-      auctionNumber: sanitizedData.auctionNumber,
-      sellerEntityName: sanitizedData.sellerEntityName,
-      sellerEntityCode: sanitizedData.sellerEntityCode,
-      state: sanitizedData.state,
-      city: sanitizedData.city,
-      emdAmount: sanitizedData.emdAmount,
-      emdReference: sanitizedData.emdReference,
-      remarks: sanitizedData.remarks,
-      auctionLocation: sanitizedData.auctionLocation || sanitizedData.yardLocation,
-      vehicleLocation:
-        sanitizedData.vehicleLocation ||
-        sanitizedData.auctionLocation ||
-        sanitizedData.yardLocation,
-      auctionerName: this.normalizeAuctionerName(sanitizedData.auctionerName),
-      officers,
-      ...sellerInfo,
-      auctionDate,
-      startDateTime,
-      endDateTime,
-      ...(inspectionFromDate ? { inspectionFromDate } : {}),
-      ...(inspectionToDate ? { inspectionToDate } : {}),
-      bidSubmissionDeadline: sanitizedData.bidSubmissionDeadline
-        ? new Date(sanitizedData.bidSubmissionDeadline)
-        : undefined,
-      emdPaidOn: sanitizedData.emdPaidOn
-        ? new Date(sanitizedData.emdPaidOn)
-        : undefined,
-      status: this.getAuctionStatus({ startDateTime, endDateTime }),
-      organizationId: new Types.ObjectId(orgId),
-      createdBy: new Types.ObjectId(authenticatedUser.userId),
-      updatedBy: new Types.ObjectId(authenticatedUser.userId),
-    });
   }
 
   async getAuctions(

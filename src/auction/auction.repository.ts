@@ -10,6 +10,21 @@ export class AuctionRepository extends BaseRepository<AuctionDocument> {
     super(auctionModel);
   }
 
+  async dropLegacyAuctionCodeIndexes() {
+    const indexes = await this.model.collection.indexes();
+    const legacyIndexes = indexes.filter((index) =>
+      Object.prototype.hasOwnProperty.call(index.key ?? {}, 'auctionCode'),
+    );
+
+    for (const index of legacyIndexes) {
+      if (index.name) {
+        await this.model.collection.dropIndex(index.name);
+      }
+    }
+
+    return legacyIndexes.map((index) => index.name).filter(Boolean);
+  }
+
   async findByOrgAndId(organizationId: string, id: string) {
     return this.findOne({
       _id: new Types.ObjectId(id),
