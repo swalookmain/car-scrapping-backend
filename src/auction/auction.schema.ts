@@ -12,6 +12,9 @@ export class AuctionOfficer {
 
   @Prop({ trim: true })
   phoneNumber?: string;
+
+  @Prop({ trim: true })
+  officerType?: string;
 }
 
 @Schema({ timestamps: true })

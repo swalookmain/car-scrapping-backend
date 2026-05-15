@@ -114,6 +114,8 @@ export class AuctionService implements OnModuleInit {
             typeof typed.phoneNumber === 'string'
               ? typed.phoneNumber.replace(/\D/g, '')
               : undefined,
+          officerType:
+            typeof typed.officerType === 'string' ? typed.officerType.trim().toUpperCase() : undefined,
         };
       })
       .filter((officer) => officer.name);
@@ -121,7 +123,9 @@ export class AuctionService implements OnModuleInit {
 
   private normalizeAuctionerName(value?: string) {
     const normalized = (value || 'MSTC').toUpperCase().trim();
-    return normalized === 'GEM' ? 'GEM' : 'MSTC';
+    if (normalized === 'GEM') return 'GEM';
+    if (normalized === 'OTHERS' || normalized === 'OTHER') return 'OTHERS';
+    return 'MSTC';
   }
 
   private normalizeSellerInfo(data: Partial<CreateAuctionDto>) {
@@ -135,22 +139,13 @@ export class AuctionService implements OnModuleInit {
     };
   }
 
-  /** Indian plate: same rules whether sent as vehicleNumber or registrationNumber (lead module uses one field). */
   private normalizeAuctionVehiclePlate(vehicle: Partial<CreateAuctionVehicleDto>): string | undefined {
     const raw = vehicle.registrationNumber || vehicle.vehicleNumber;
     if (!raw || !String(raw).trim()) return undefined;
-    return String(raw).toUpperCase().replace(/[\s-]+/g, '');
+    return String(raw).trim();
   }
 
   private validateVehiclePayload(vehicle: Partial<CreateAuctionVehicleDto>) {
-    const normalized = this.normalizeAuctionVehiclePlate(vehicle);
-    if (normalized) {
-      const standard = /^[A-Z]{2}\d{1,2}[A-Z]{1,3}\d{4}$/.test(normalized);
-      const bhSeries = /^\d{2}BH\d{4}[A-Z]{2}$/.test(normalized);
-      if (!standard && !bhSeries) {
-        throw new BadRequestException('Invalid vehicle number / registration format');
-      }
-    }
     if (vehicle.chassisLast5 && !/^[A-Z0-9]{5}$/.test(vehicle.chassisLast5.toUpperCase())) {
       throw new BadRequestException('Last 5 chassis digits must be 5 uppercase alphanumeric');
     }
