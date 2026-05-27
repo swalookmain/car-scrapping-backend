@@ -3,6 +3,7 @@ import {
   Injectable,
   NotFoundException,
   Inject,
+  forwardRef,
 } from '@nestjs/common';
 import type { LoggerService } from '@nestjs/common';
 import { WINSTON_MODULE_NEST_PROVIDER } from 'nest-winston';
@@ -22,6 +23,7 @@ import { AuthenticatedUser } from 'src/common/interface/authenticated-user.inter
 import { PaginatedResponse } from 'src/common/interface/paginated-response.interface';
 import { getPagination } from 'src/common/utils/pagination.util';
 import type { Inventory } from './inventory.schema';
+import { YardService } from 'src/yard/yard.service';
 
 @Injectable()
 export class InventoryService {
@@ -29,6 +31,8 @@ export class InventoryService {
     private readonly inventoryRepo: InventoryRepository,
     private readonly invoiceRepo: InvoiceRepository,
     private readonly vehicleInvoiceRepo: VehicleInvoiceRepository,
+    @Inject(forwardRef(() => YardService))
+    private readonly yardService: YardService,
     @Inject(WINSTON_MODULE_NEST_PROVIDER)
     private readonly logger: LoggerService,
   ) {}
@@ -66,6 +70,8 @@ export class InventoryService {
       if (existingParts) {
         throw new BadRequestException('Dismantling already completed');
       }
+
+      await this.yardService.assertCanCreateInventory(vechileId);
 
       const vechileModel =
         (vechileInvoice as { model_name?: string }).model_name ?? 'UNKNOWN';
@@ -130,7 +136,9 @@ export class InventoryService {
         };
       });
 
-      return this.inventoryRepo.createMany(records);
+      const created = await this.inventoryRepo.createMany(records);
+      await this.yardService.completeDismantling(vechileId, authenticatedUser);
+      return created;
     } catch (error) {
       if (error instanceof BadRequestException || error instanceof NotFoundException) {
         throw error;

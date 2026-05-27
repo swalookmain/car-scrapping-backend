@@ -35,6 +35,7 @@ import { AccountingModule } from 'src/accounting/accounting.module';
 import { UsersModule } from 'src/users/users.module';
 import { LeadModule } from 'src/lead/lead.module';
 import { AuctionModule } from 'src/auction/auction.module';
+import { YardModule } from 'src/yard/yard.module';
 
 @Module({
   imports: [
@@ -72,6 +73,7 @@ import { AuctionModule } from 'src/auction/auction.module';
     UsersModule,
     LeadModule,
     forwardRef(() => AuctionModule),
+    forwardRef(() => YardModule),
   ],
   controllers: [InvoiceController],
   providers: [
