@@ -41,6 +41,7 @@ import { PurchaseDocumentType } from './purchase-document.schema';
 import { LeadSource } from 'src/common/enum/leadSource.enum';
 import type { LeadDocument } from 'src/lead/lead.schema';
 import { AuctionService } from 'src/auction/auction.service';
+import { YardService } from 'src/yard/yard.service';
 
 @Injectable()
 export class InvoiceService {
@@ -58,6 +59,8 @@ export class InvoiceService {
       private readonly leadService: LeadService,
       @Inject(forwardRef(() => AuctionService))
       private readonly auctionService: AuctionService,
+      @Inject(forwardRef(() => YardService))
+      private readonly yardService: YardService,
       private readonly storageService: StorageService,
       @Inject(WINSTON_MODULE_NEST_PROVIDER)
       private readonly logger: LoggerService,
@@ -310,6 +313,12 @@ export class InvoiceService {
             authenticatedUser,
           );
         }
+        const confirmedInvoice = await this.invoiceRepository.findById(
+          invoice._id.toString(),
+        );
+        if (confirmedInvoice?.status === InvoiceStatus.CONFIRMED) {
+          await this.syncYardAfterConfirm(invoice._id.toString(), authenticatedUser);
+        }
         return vechileInvoice;
       } catch (error) {
         if(error instanceof NotFoundException || error instanceof BadRequestException) {
@@ -372,6 +381,8 @@ export class InvoiceService {
 
       if (invoice.status !== InvoiceStatus.CONFIRMED) {
         await this.updateInvoice(invoiceId, { status: InvoiceStatus.CONFIRMED }, authenticatedUser);
+      } else {
+        await this.syncYardAfterConfirm(invoiceId, authenticatedUser);
       }
 
       return {
@@ -477,6 +488,7 @@ export class InvoiceService {
             totalTaxAmount: updatedInvoice.totalTaxAmount,
             reverseChargeApplicable: updatedInvoice.reverseChargeApplicable,
           });
+          await this.syncYardAfterConfirm(invoiceId, authenticatedUser);
         }
         await this.gstAuditService.logEvent({
           organizationId: orgId,
@@ -1209,5 +1221,23 @@ export class InvoiceService {
         throw new BadRequestException('Organization not found');
       }
       return authenticatedUser.orgId;
+    }
+
+    private async syncYardAfterConfirm(
+      invoiceId: string,
+      authenticatedUser: AuthenticatedUser,
+    ) {
+      try {
+        await this.yardService.ensureYardEntriesForInvoice(
+          invoiceId,
+          authenticatedUser,
+        );
+      } catch (error) {
+        const msg = error instanceof Error ? error.message : 'Unknown error';
+        this.logger.warn(
+          `Yard sync failed for invoice ${invoiceId}: ${msg}`,
+          'InvoiceService',
+        );
+      }
     }
 }
