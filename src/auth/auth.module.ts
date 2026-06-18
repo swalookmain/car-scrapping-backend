@@ -9,10 +9,14 @@ import { JwtStrategy } from './strategies/jwt.strategies';
 import { MongooseModule } from '@nestjs/mongoose';
 import { RefreshToken, RefreshTokenSchema } from './refresh-token.schema';
 import { AuthRepository } from './auth.repository';
+import { OrganizationsModule } from '../organizations/organizations.module';
+import { SubscriptionModule } from '../subscription/subscription.module';
 
 @Module({
   imports: [
     UsersModule,
+    OrganizationsModule,
+    SubscriptionModule,
     PassportModule.register({ defaultStrategy: 'jwt' }),
     JwtModule.registerAsync({
       inject: [ConfigService],

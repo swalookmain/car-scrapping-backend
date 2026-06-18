@@ -919,21 +919,22 @@ export class InvoiceService {
           await this.purchaseDocumentRepository.createMany(uploads);
         return { message: 'Documents uploaded', documents: saved };
       } catch (error) {
-        const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-        const errorStack = error instanceof Error ? error.stack : undefined;
-        this.logger.warn(
-          `Purchase document upload bypassed: ${errorMessage}`,
+        if (
+          error instanceof NotFoundException ||
+          error instanceof BadRequestException
+        ) {
+          throw error;
+        }
+        const errorMessage =
+          error instanceof Error ? error.message : 'Unknown error';
+        this.logger.error(
+          `Purchase document upload failed: ${errorMessage}`,
+          error instanceof Error ? error.stack : undefined,
           'InvoiceService',
         );
-        if (errorStack) {
-          this.logger.warn(errorStack, 'InvoiceService');
-        }
-        // Temporary bypass: do not block invoice flow on document upload failures.
-        return {
-          message: 'Purchase document upload skipped for now',
-          documents: [],
-          skipped: true,
-        };
+        throw new BadRequestException(
+          'Failed to upload purchase documents. Please try again.',
+        );
       }
     }
 

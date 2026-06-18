@@ -16,11 +16,14 @@ export class User {
   @Prop({ enum: Role, required: true })
   role: Role;
 
-  @Prop({ required: true })
+  @Prop({ default: '' })
   phoneNumber: string;
 
   @Prop({ type: Types.ObjectId, ref: 'organizations', default: null })
   organizationId: Types.ObjectId | null;
+
+  @Prop({ default: false })
+  emailVerified: boolean;
 
   @Prop({ default: true })
   isActive: boolean;

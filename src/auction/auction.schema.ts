@@ -31,6 +31,9 @@ export class Auction extends Document {
   @Prop({ required: true, trim: true })
   auctionNumber: string;
 
+  @Prop({ trim: true })
+  buyerReferenceNumber?: string;
+
   @Prop({ type: Date, required: true })
   auctionDate: Date;
 

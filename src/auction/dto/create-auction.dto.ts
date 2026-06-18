@@ -27,29 +27,9 @@ const emptyToUndefinedDigits = ({ value }: { value: unknown }): string | undefin
   return raw?.replace(/\D/g, '');
 };
 
-export class AuctionOfficerDto {
-  @ApiProperty()
-  @IsString()
-  name: string;
+import { AuctionOfficerDto } from 'src/common/dto/auction-officer.dto';
 
-  @ApiPropertyOptional()
-  @Transform(emptyToUndefined)
-  @IsOptional()
-  @IsEmail()
-  email?: string;
-
-  @ApiPropertyOptional()
-  @Transform(emptyToUndefinedDigits)
-  @IsOptional()
-  @Matches(/^\d{10}$/, { message: 'Officer phone number must be exactly 10 digits' })
-  phoneNumber?: string;
-
-  @ApiPropertyOptional({ enum: ['MSTC', 'GEM', 'OTHERS', 'SELLER'] })
-  @IsString()
-  @IsIn(['MSTC', 'GEM', 'OTHERS', 'SELLER'])
-  @IsOptional()
-  officerType?: string;
-}
+export { AuctionOfficerDto };
 
 export class CreateAuctionDto {
   @ApiPropertyOptional({ enum: ['MSTC', 'GEM', 'OTHERS'], default: 'MSTC' })
@@ -61,6 +41,11 @@ export class CreateAuctionDto {
   @ApiProperty()
   @IsString()
   auctionNumber: string;
+
+  @ApiPropertyOptional()
+  @IsString()
+  @IsOptional()
+  buyerReferenceNumber?: string;
 
   @ApiProperty()
   @IsDateString()

@@ -2,7 +2,6 @@ import { Module } from '@nestjs/common';
 import { MongooseModule } from '@nestjs/mongoose';
 import { OrganizationsModule } from 'src/organizations/organizations.module';
 import { UsersModule } from 'src/users/users.module';
-import { StorageService } from 'src/common/services/storage.service';
 import { LeadController } from './lead.controller';
 import { LeadService } from './lead.service';
 import { LeadRepository } from './lead.repository';
@@ -23,12 +22,7 @@ import {
     UsersModule,
   ],
   controllers: [LeadController],
-  providers: [
-    LeadService,
-    LeadRepository,
-    LeadDocumentRepository,
-    StorageService,
-  ],
+  providers: [LeadService, LeadRepository, LeadDocumentRepository],
   exports: [LeadService, LeadRepository, LeadDocumentRepository],
 })
 export class LeadModule {}

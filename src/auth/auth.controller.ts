@@ -9,6 +9,7 @@ import {
 import type { Response, Request } from 'express';
 import { AuthService } from './auth.service';
 import { CreateAuthDto } from './dto/create-auth.dto';
+import { SignupDto } from './dto/signup.dto';
 import { ApiTags, ApiOperation, ApiResponse } from '@nestjs/swagger';
 import { extractMetadataFromRequest } from './utils/metadata.util';
 
@@ -47,6 +48,38 @@ export class AuthController {
     });
 
     // Return response without refreshToken in body for security
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
+    const { refreshToken, ...response } = result;
+    return response;
+  }
+
+  @Post('signup')
+  @ApiOperation({ summary: 'Public user signup' })
+  @ApiResponse({ status: 201, description: 'Signup successful' })
+  @ApiResponse({ status: 409, description: 'Email already exists' })
+  async signup(
+    @Body() dto: SignupDto,
+    @Req() req: Request,
+    @Res({ passthrough: true }) res: Response,
+  ) {
+    const metadata = extractMetadataFromRequest(req);
+    const result = await this.authService.signup(
+      dto.email,
+      dto.password,
+      dto.confirmPassword,
+      dto.organizationName,
+      metadata,
+    );
+
+    const maxAge = 2 * 24 * 60 * 60 * 1000;
+    res.cookie('refreshToken', result.refreshToken, {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === 'production',
+      sameSite: 'strict',
+      maxAge: maxAge,
+      path: '/',
+    });
+
     // eslint-disable-next-line @typescript-eslint/no-unused-vars
     const { refreshToken, ...response } = result;
     return response;

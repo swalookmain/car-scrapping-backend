@@ -1,0 +1,131 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: 'Times New Roman', Times, serif;
+      font-size: 13px;
+      color: #111;
+      line-height: 1.45;
+      padding: 24px 28px;
+      position: relative;
+    }
+    .corner-tl, .corner-br {
+      position: absolute;
+      width: 48px;
+      height: 48px;
+      border: 4px solid #f4c430;
+    }
+    .corner-tl { top: 8px; left: 8px; border-right: none; border-bottom: none; }
+    .corner-br { bottom: 8px; right: 8px; border-left: none; border-top: none; }
+    .header {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      margin-bottom: 10px;
+      padding-bottom: 8px;
+      border-bottom: 2px solid #222;
+    }
+    .header-left { display: flex; gap: 10px; align-items: center; max-width: 65%; }
+    .header-left img { max-height: 58px; max-width: 90px; object-fit: contain; }
+    .org-name { font-size: 20px; font-weight: bold; text-transform: uppercase; }
+    .tagline { font-size: 11px; font-style: italic; margin-top: 2px; }
+    .header-right { text-align: right; font-size: 12px; }
+    .buyer-ref { margin-top: 6px; font-weight: bold; }
+    .meta { margin: 14px 0; }
+    .to-block { margin: 16px 0; }
+    .subject {
+      text-align: center;
+      font-weight: bold;
+      text-decoration: underline;
+      margin: 18px 0;
+      text-transform: uppercase;
+    }
+    .body p { margin-bottom: 12px; text-align: justify; }
+    .lot-lines { margin: 14px 0 18px 24px; }
+    .lot-lines li { margin-bottom: 6px; }
+    .sign-block { margin-top: 28px; }
+    .sign-block img { max-height: 56px; max-width: 140px; object-fit: contain; display: block; margin: 8px 0; }
+    .sign-name { font-weight: bold; }
+    .footer {
+      margin-top: 36px;
+      border-top: 2px solid #222;
+      padding-top: 8px;
+      font-size: 11px;
+      text-align: center;
+      line-height: 1.5;
+    }
+  </style>
+</head>
+<body>
+  <div class="corner-tl"></div>
+  <div class="corner-br"></div>
+
+  <div class="header">
+    <div class="header-left">
+      {{#if settings.logoUrl}}<img src="{{settings.logoUrl}}" alt="Logo" />{{/if}}
+      <div>
+        <div class="org-name">{{settings.legalName}}</div>
+        {{#if settings.tagline}}<div class="tagline">{{settings.tagline}}</div>{{/if}}
+      </div>
+    </div>
+    <div class="header-right">
+      {{#if settings.rvsfLogoUrl}}<img src="{{settings.rvsfLogoUrl}}" alt="RVSF" style="max-height:50px;max-width:90px;object-fit:contain;" />{{/if}}
+      {{#if settings.gstin}}<div>GSTIN: {{settings.gstin}}</div>{{/if}}
+      <div class="buyer-ref">{{buyerRefDisplay}}</div>
+    </div>
+  </div>
+
+  <div class="meta">Date: {{today}}</div>
+
+  <div class="to-block">
+    <div><strong>To,</strong></div>
+    <div>{{letter.recipientName}}</div>
+    <div>{{letter.recipientAddress}}{{#if letter.recipientPinCode}}, PIN - {{letter.recipientPinCode}}{{/if}}</div>
+  </div>
+
+  <div class="subject">
+    Subject: Extension of Vehicle Lifting Period
+  </div>
+
+  <div class="body">
+    <p>
+      With reference to the above subject, we hereby inform you that the last date of lifting of vehicles
+      as per the delivery order issued in respect of the auction conducted by MSTC Ltd. is hereby extended
+      for a further period of <strong>{{extensionDays}}</strong> day(s) from the original last date of lifting mentioned below.
+    </p>
+    <p>
+      You are requested to complete the lifting of vehicles within the extended period. No further extension
+      shall be granted beyond the revised date.
+    </p>
+    <p>Details of lots for which extension is granted:</p>
+  </div>
+
+  <ol class="lot-lines">
+    {{#each lotLines}}
+    <li>{{this}}</li>
+    {{/each}}
+  </ol>
+
+  <div class="body">
+    <p>Thanking you,</p>
+  </div>
+
+  <div class="sign-block">
+    <div>Yours faithfully,</div>
+    {{#if settings.signatureUrl}}<img src="{{settings.signatureUrl}}" alt="Signature" />{{/if}}
+    <div class="sign-name">{{settings.proprietorName}}</div>
+    <div>{{settings.proprietorTitle}}</div>
+    {{#if settings.signatoryAddress}}<div>{{settings.signatoryAddress}}</div>{{/if}}
+  </div>
+
+  <div class="footer">
+    {{#if settings.address}}<div>{{settings.address}}{{#if settings.pinCode}} - {{settings.pinCode}}{{/if}}</div>{{/if}}
+  {{#if mobileDisplay}}<div>Mobile: {{mobileDisplay}}</div>{{/if}}
+    {{#if settings.email}}<div>Email: {{settings.email}}</div>{{/if}}
+    {{#if settings.website}}<div>Website: {{settings.website}}</div>{{/if}}
+  </div>
+</body>
+</html>

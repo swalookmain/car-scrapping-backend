@@ -20,15 +20,44 @@ import {
 import { Role } from 'src/common/enum/role.enum';
 import { AuthenticatedUser } from 'src/common/interface/authenticated-user.interface';
 import { Types } from 'mongoose';
+import { SubscriptionService } from '../subscription/subscription.service';
+import { SubscriptionCreatedBy } from '../subscription/enum/subscription-created-by.enum';
+import { SubscriptionInputDto } from '../subscription/dto/subscription-input.dto';
 
 @Injectable()
 export class UsersService {
   constructor(
     private readonly userRepo: UsersRepository,
     private readonly organizationsService: OrganizationsService,
+    private readonly subscriptionService: SubscriptionService,
     @Inject(WINSTON_MODULE_NEST_PROVIDER)
     private readonly logger: LoggerService,
   ) {}
+
+  async createSignupUser(userData: {
+    name: string;
+    email: string;
+    password: string;
+    organizationId: string;
+  }) {
+    const validatedOrgId = validateObjectId(
+      userData.organizationId,
+      'Organization ID',
+    );
+
+    const user = await this.userRepo.create({
+      name: userData.name,
+      email: userData.email.toLowerCase().trim(),
+      password: userData.password,
+      role: Role.ADMIN,
+      organizationId: new Types.ObjectId(validatedOrgId),
+      phoneNumber: '',
+      emailVerified: false,
+      isActive: true,
+    });
+
+    return user;
+  }
 
   async createAdmin(userData: Partial<any>) {
     try {
@@ -42,31 +71,46 @@ export class UsersService {
         throw new BadRequestException('Invalid email format');
       }
 
-      // Validate organizationId is provided for ADMIN
-      if (
-        !userData.organizationId ||
-        typeof userData.organizationId !== 'string'
-      ) {
+      let validatedOrgId: string;
+
+      if (userData.organizationId) {
+        validatedOrgId = validateObjectId(
+          userData.organizationId,
+          'Organization ID',
+        );
+        try {
+          await this.organizationsService.getById(validatedOrgId);
+        } catch (error) {
+          if (error instanceof NotFoundException) {
+            throw new NotFoundException('Organization not found');
+          }
+          throw error;
+        }
+      } else if (userData.organizationName) {
+        const org = await this.organizationsService.create({
+          name: userData.organizationName,
+          isActive: true,
+        });
+        validatedOrgId = org._id.toString();
+      } else {
         throw new BadRequestException(
-          'Organization ID is required for admin users',
+          'Organization ID or organization name is required for admin users',
         );
       }
 
-      // Validate and check if organization exists
-      const validatedOrgId = validateObjectId(
-        userData.organizationId,
-        'Organization ID',
+      const subscriptionInput: SubscriptionInputDto =
+        userData.subscription ||
+        this.subscriptionService.defaultTrialInput();
+
+      await this.subscriptionService.createOrUpdateForOrg(
+        validatedOrgId,
+        subscriptionInput,
+        SubscriptionCreatedBy.SUPERADMIN,
       );
-      try {
-        await this.organizationsService.getById(validatedOrgId);
-      } catch (error) {
-        if (error instanceof NotFoundException) {
-          throw new NotFoundException('Organization not found');
-        }
-        throw error;
-      }
 
       const sanitizedData = sanitizeObject(userData);
+      delete sanitizedData.organizationName;
+      delete sanitizedData.subscription;
 
       // Check if user with this email already exists (handle legacy dotless)
       const email = sanitizedData.email as string;
@@ -92,7 +136,10 @@ export class UsersService {
       const passwordHash = await hashPassword(userData.password);
       sanitizedData.password = passwordHash;
       sanitizedData.role = Role.ADMIN;
-      sanitizedData.organizationId = validatedOrgId;
+      sanitizedData.organizationId = new Types.ObjectId(validatedOrgId);
+      if (!sanitizedData.phoneNumber) {
+        sanitizedData.phoneNumber = '';
+      }
 
       const user = await this.userRepo.create(sanitizedData);
       const userObj = user.toObject();
