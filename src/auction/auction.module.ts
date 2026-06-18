@@ -17,10 +17,20 @@ import { AuctionCounterRepository } from './auction-counter.repository';
 import { Invoice, InvoiceSchema } from 'src/invoice/invoice.schema';
 import { InvoiceRepository } from 'src/invoice/invoice.repository';
 import { AuctionVehicleDocumentRepository } from './auction-vehicle-document.repository';
-import { StorageService } from 'src/common/services/storage.service';
+import { NotificationModule } from 'src/notification/notification.module';
+import { LifecycleController } from './lifecycle/lifecycle.controller';
+import { LifecycleService } from './lifecycle/lifecycle.service';
+import { LifecycleStateService } from './lifecycle/lifecycle-state.service';
+import { LotPaymentRecord, LotPaymentRecordSchema } from './lifecycle/schemas/lot-payment-record.schema';
+import { LotLifecycleEvent, LotLifecycleEventSchema } from './lifecycle/schemas/lot-lifecycle-event.schema';
+import { LotDocument, LotDocumentSchema } from './lifecycle/schemas/lot-document.schema';
+import { LotPaymentRecordRepository } from './lifecycle/repositories/lot-payment-record.repository';
+import { LotLifecycleEventRepository } from './lifecycle/repositories/lot-lifecycle-event.repository';
+import { LotDocumentRepository } from './lifecycle/repositories/lot-document.repository';
 
 @Module({
   imports: [
+    NotificationModule,
     MongooseModule.forFeature([
       { name: Auction.name, schema: AuctionSchema },
       { name: AuctionLot.name, schema: AuctionLotSchema },
@@ -31,18 +41,25 @@ import { StorageService } from 'src/common/services/storage.service';
       },
       { name: AuctionCounter.name, schema: AuctionCounterSchema },
       { name: Invoice.name, schema: InvoiceSchema },
+      { name: LotPaymentRecord.name, schema: LotPaymentRecordSchema },
+      { name: LotLifecycleEvent.name, schema: LotLifecycleEventSchema },
+      { name: LotDocument.name, schema: LotDocumentSchema },
     ]),
   ],
-  controllers: [AuctionController],
+  controllers: [AuctionController, LifecycleController],
   providers: [
     AuctionService,
+    LifecycleService,
+    LifecycleStateService,
     AuctionRepository,
     AuctionLotRepository,
     AuctionVehicleRepository,
     AuctionCounterRepository,
     InvoiceRepository,
     AuctionVehicleDocumentRepository,
-    StorageService,
+    LotPaymentRecordRepository,
+    LotLifecycleEventRepository,
+    LotDocumentRepository,
   ],
   exports: [
     AuctionService,

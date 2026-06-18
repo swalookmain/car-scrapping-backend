@@ -6,11 +6,13 @@ import { User, UsersSchema } from './users.schema';
 import { UsersRepository } from './users.repository';
 import { SuperAdminBootstrap } from './super-admin.bootstrap';
 import { OrganizationsModule } from '../organizations/organizations.module';
+import { SubscriptionModule } from '../subscription/subscription.module';
 
 @Module({
   imports: [
     MongooseModule.forFeature([{ name: User.name, schema: UsersSchema }]),
     OrganizationsModule,
+    SubscriptionModule,
   ],
   controllers: [UsersController],
   providers: [UsersService, UsersRepository, SuperAdminBootstrap],

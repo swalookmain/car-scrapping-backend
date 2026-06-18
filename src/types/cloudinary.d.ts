@@ -7,6 +7,8 @@ declare module 'cloudinary' {
   export interface UploadStreamOptions {
     folder?: string;
     resource_type?: 'auto' | 'image' | 'video' | 'raw';
+    use_filename?: boolean;
+    unique_filename?: boolean;
   }
 
   export interface UploadResponseCallback {

@@ -1,4 +1,5 @@
 import { Module } from '@nestjs/common';
+import { ScheduleModule } from '@nestjs/schedule';
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
 import { AuthModule } from './auth/auth.module';
@@ -21,10 +22,16 @@ import { AccountingModule } from './accounting/accounting.module';
 import { LeadModule } from './lead/lead.module';
 import { AuctionModule } from './auction/auction.module';
 import { YardModule } from './yard/yard.module';
+import { NotificationModule } from './notification/notification.module';
+import { SubscriptionModule } from './subscription/subscription.module';
+import { StorageModule } from './common/storage/storage.module';
+import { AuthorizationLetterModule } from './authorization-letter/authorization-letter.module';
 
 @Module({
   imports: [
+    ScheduleModule.forRoot(),
     WinstonModule.forRoot(winstonConfig),
+    StorageModule,
     AuthModule,
     UsersModule,
     OrganizationsModule,
@@ -42,6 +49,9 @@ import { YardModule } from './yard/yard.module';
     LeadModule,
     AuctionModule,
     YardModule,
+    NotificationModule,
+    SubscriptionModule,
+    AuthorizationLetterModule,
   ],
   controllers: [AppController],
   providers: [AppService, AuditLogInterceptor],

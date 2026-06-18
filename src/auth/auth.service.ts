@@ -3,6 +3,7 @@ import {
   Injectable,
   UnauthorizedException,
   BadRequestException,
+  ConflictException,
   Inject,
 } from '@nestjs/common';
 import type { LoggerService } from '@nestjs/common';
@@ -16,6 +17,11 @@ import { isValidEmail } from '../common/utils/security.util';
 import { JwtPayload } from './interfaces/jwt-payload.interface';
 import { AuthRepository } from './auth.repository';
 import { RequestMetadata } from './utils/metadata.util';
+import { OrganizationsService } from '../organizations/organizations.service';
+import { SubscriptionService } from '../subscription/subscription.service';
+import { SubscriptionType } from '../subscription/enum/subscription-type.enum';
+import { SubscriptionCreatedBy } from '../subscription/enum/subscription-created-by.enum';
+import { hashPassword } from '../common/utils/password.util';
 
 @Injectable()
 export class AuthService {
@@ -24,6 +30,8 @@ export class AuthService {
     private readonly jwtService: JwtService,
     private readonly config: ConfigService,
     private readonly authRepository: AuthRepository,
+    private readonly organizationsService: OrganizationsService,
+    private readonly subscriptionService: SubscriptionService,
     @Inject(WINSTON_MODULE_NEST_PROVIDER)
     private readonly logger: LoggerService,
   ) {}
@@ -92,6 +100,8 @@ export class AuthService {
         throw new ForbiddenException('User not assigned to organization');
       }
 
+      await this.assertOrgSubscriptionActive(user);
+
       const payload: JwtPayload = {
         sub: user._id.toString(),
         email: user.email,
@@ -128,17 +138,7 @@ export class AuthService {
         'AuthService',
       );
 
-      return {
-        accessToken,
-        refreshToken,
-        user: {
-          id: user._id,
-          role: user.role,
-          orgId: user.organizationId,
-          email: user.email,
-          name: user.name,
-        },
-      };
+      return this.buildAuthResponse(user, accessToken, refreshToken);
     } catch (error) {
       if (
         error instanceof UnauthorizedException ||
@@ -148,6 +148,158 @@ export class AuthService {
         throw error;
       }
       throw new UnauthorizedException('Invalid credentials');
+    }
+  }
+
+  async signup(
+    email: string,
+    password: string,
+    confirmPassword: string,
+    organizationName: string,
+    metadata?: RequestMetadata,
+  ) {
+    if (!email || !password || !confirmPassword || !organizationName) {
+      throw new BadRequestException(
+        'Email, password, confirm password, and organization name are required',
+      );
+    }
+
+    const trimmedOrgName = organizationName.trim();
+    if (trimmedOrgName.length < 2) {
+      throw new BadRequestException(
+        'Organization name must be at least 2 characters',
+      );
+    }
+
+    if (password !== confirmPassword) {
+      throw new BadRequestException('Passwords do not match');
+    }
+
+    if (!isValidEmail(email)) {
+      throw new BadRequestException('Invalid email format');
+    }
+
+    const sanitizedEmail = email.toLowerCase().trim();
+
+    const existing = await this.usersService.getByEmailwithPassword(sanitizedEmail);
+    if (existing) {
+      throw new ConflictException('User with this email already exists');
+    }
+
+    const orgName = trimmedOrgName;
+    const nameFromEmail = sanitizedEmail.split('@')[0] || 'User';
+
+    let organization: { _id: { toString(): string } } | null = null;
+    let user: {
+      _id: { toString(): string };
+      email: string;
+      role: Role;
+      organizationId: unknown;
+      name: string;
+    } | null = null;
+
+    try {
+      organization = await this.organizationsService.create({
+        name: orgName,
+        isActive: true,
+      });
+
+      const orgId = organization._id.toString();
+      const passwordHash = await hashPassword(password);
+
+      user = await this.usersService.createSignupUser({
+        name: nameFromEmail,
+        email: sanitizedEmail,
+        password: passwordHash,
+        organizationId: orgId,
+      });
+
+      const startDate = this.subscriptionService.startOfDayUtc(new Date());
+      const endDate = this.subscriptionService.calculateEndDate(
+        SubscriptionType.TRIAL,
+        null,
+        startDate,
+      );
+
+      await this.subscriptionService.create({
+        organizationId: orgId,
+        type: SubscriptionType.TRIAL,
+        plan: null,
+        startDate,
+        endDate,
+        createdBy: SubscriptionCreatedBy.SELF_SIGNUP,
+      });
+
+      const payload: JwtPayload = {
+        sub: user._id.toString(),
+        email: user.email,
+        role: user.role,
+        orgId,
+        name: user.name,
+      };
+
+      const accessToken = this.jwtService.sign(payload, {
+        secret: this.config.get('jwt.access.secret'),
+        expiresIn: this.config.get('jwt.access.expiresIn'),
+      });
+      const refreshToken = this.jwtService.sign(payload, {
+        secret: this.config.get('jwt.refresh.secret'),
+        expiresIn: this.config.get('jwt.refresh.expiresIn'),
+      });
+
+      const refreshExpiresIn =
+        this.config.get<string>('jwt.refresh.expiresIn') || '2d';
+      const expiresAt = this.calculateExpirationDate(refreshExpiresIn);
+
+      await this.authRepository.createRefreshToken(
+        user._id.toString(),
+        refreshToken,
+        metadata || {},
+        expiresAt,
+      );
+
+      this.logger.log(
+        `Successful signup for user: ${user.email}`,
+        'AuthService',
+      );
+
+      return this.buildAuthResponse(user, accessToken, refreshToken);
+    } catch (error) {
+      if (user?._id) {
+        await this.usersService.remove(user._id.toString()).catch(() => undefined);
+      }
+      if (organization?._id) {
+        await this.organizationsService
+          .remove(organization._id.toString())
+          .catch(() => undefined);
+      }
+
+      if (error instanceof ConflictException) {
+        throw error;
+      }
+
+      if (error instanceof BadRequestException) {
+        const response = error.getResponse();
+        const msg =
+          typeof response === 'string'
+            ? response
+            : typeof response === 'object' &&
+                response !== null &&
+                'message' in response
+              ? String((response as { message: string | string[] }).message)
+              : error.message;
+        if (msg.includes('Organization with this name already exists')) {
+          throw new ConflictException(
+            'Organization with this name already exists',
+          );
+        }
+        throw error;
+      }
+
+      const errorMessage =
+        error instanceof Error ? error.message : 'Unknown error';
+      this.logger.error(`Signup failed: ${errorMessage}`, 'AuthService');
+      throw new BadRequestException('Failed to create account');
     }
   }
 
@@ -190,6 +342,8 @@ export class AuthService {
       if (user.isActive === false) {
         throw new ForbiddenException('Account is deactivated');
       }
+
+      await this.assertOrgSubscriptionActive(user);
 
       const payload: JwtPayload = {
         sub: decoded.sub,
@@ -275,6 +429,56 @@ export class AuthService {
       );
       // Don't throw error on logout failure to prevent user from being stuck
     }
+  }
+
+  private async assertOrgSubscriptionActive(user: {
+    role: Role;
+    organizationId?: { toString(): string } | string | null;
+    isActive?: boolean;
+  }) {
+    if (user.role === Role.SUPER_ADMIN) {
+      return;
+    }
+
+    const orgId =
+      typeof user.organizationId === 'string'
+        ? user.organizationId
+        : user.organizationId?.toString();
+
+    if (!orgId) {
+      throw new ForbiddenException('User not assigned to organization');
+    }
+
+    const isActive = await this.subscriptionService.isOrgSubscriptionActive(orgId);
+    if (!isActive) {
+      throw new ForbiddenException(
+        'Subscription expired. Contact support to upgrade.',
+      );
+    }
+  }
+
+  private buildAuthResponse(
+    user: {
+      _id: { toString(): string } | string;
+      role: Role;
+      organizationId?: unknown;
+      email: string;
+      name: string;
+    },
+    accessToken: string,
+    refreshToken: string,
+  ) {
+    return {
+      accessToken,
+      refreshToken,
+      user: {
+        id: typeof user._id === 'string' ? user._id : user._id.toString(),
+        role: user.role,
+        orgId: user.organizationId,
+        email: user.email,
+        name: user.name,
+      },
+    };
   }
 
   private calculateExpirationDate(expiresIn: string): Date {

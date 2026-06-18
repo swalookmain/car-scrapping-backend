@@ -28,6 +28,8 @@ import { StorageService, UploadFile } from 'src/common/services/storage.service'
 import { assertSupportedDocumentFile } from 'src/common/utils/document-upload.util';
 import { CreateAuctionVehicleBatchDto } from './dto/create-auction-vehicle.dto';
 import { AuctionVehicleImageType } from './auction-vehicle-document.schema';
+import { LifecycleStateService } from './lifecycle/lifecycle-state.service';
+import { LotOutcomeStatus } from 'src/common/enum/lotOutcomeStatus.enum';
 
 @Injectable()
 export class AuctionService implements OnModuleInit {
@@ -36,6 +38,7 @@ export class AuctionService implements OnModuleInit {
   constructor(
     private readonly auctionRepository: AuctionRepository,
     private readonly auctionLotRepository: AuctionLotRepository,
+    private readonly lifecycleStateService: LifecycleStateService,
     private readonly auctionVehicleRepository: AuctionVehicleRepository,
     private readonly auctionCounterRepository: AuctionCounterRepository,
     private readonly invoiceRepository: InvoiceRepository,
@@ -276,8 +279,26 @@ export class AuctionService implements OnModuleInit {
       safeLimit,
       { auctionDate: -1 },
     );
+    const enriched = await Promise.all(
+      data.map(async (auction) => {
+        const lots = await this.auctionLotRepository.findByAuction(
+          orgId,
+          auction._id.toString(),
+        );
+        const auctionSummary = this.lifecycleStateService.deriveAuctionSummary(lots);
+        const availableActions = this.lifecycleStateService.deriveAvailableActions(
+          lots,
+          !!auction.cancelledAt,
+        );
+        return {
+          ...auction.toObject(),
+          auctionSummary,
+          availableActions,
+        };
+      }),
+    );
     return {
-      data,
+      data: enriched,
       meta: {
         page: safePage,
         limit: safeLimit,
@@ -690,9 +711,18 @@ export class AuctionService implements OnModuleInit {
 
   async getLookup(authenticatedUser: AuthenticatedUser) {
     const orgId = this.getOrgId(authenticatedUser);
+    const dealDoneLots = await this.auctionLotRepository.findAllByFilter({
+      organizationId: new Types.ObjectId(orgId),
+      outcomeStatus: LotOutcomeStatus.DEAL_DONE,
+    });
+    const auctionIds = [
+      ...new Set(dealDoneLots.map((lot) => lot.auctionId.toString())),
+    ];
+    if (!auctionIds.length) return [];
     const auctions = await this.auctionRepository.findAllByFilter({
       organizationId: new Types.ObjectId(orgId),
-      status: AuctionStatus.DEAL_DONE,
+      _id: { $in: auctionIds.map((id) => new Types.ObjectId(id)) },
+      $or: [{ cancelledAt: { $exists: false } }, { cancelledAt: null }],
     });
     return auctions;
   }

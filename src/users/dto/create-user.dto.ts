@@ -7,8 +7,11 @@ import {
   MaxLength,
   IsEnum,
   IsBoolean,
+  ValidateNested,
 } from 'class-validator';
+import { Type } from 'class-transformer';
 import { Role } from 'src/common/enum/role.enum';
+import { SubscriptionInputDto } from 'src/subscription/dto/subscription-input.dto';
 
 export class CreateUserDto {
   @ApiProperty()
@@ -37,9 +40,22 @@ export class CreateUserDto {
 
   @ApiPropertyOptional({
     description:
-      'Organization ID (required for ADMIN role, automatically assigned for STAFF)',
+      'Organization ID (required unless organizationName is provided)',
   })
   @IsString()
   @IsOptional()
   organizationId?: string;
+
+  @ApiPropertyOptional({
+    description: 'Organization name when creating a new client',
+  })
+  @IsString()
+  @IsOptional()
+  organizationName?: string;
+
+  @ApiPropertyOptional({ type: SubscriptionInputDto })
+  @ValidateNested()
+  @Type(() => SubscriptionInputDto)
+  @IsOptional()
+  subscription?: SubscriptionInputDto;
 }
