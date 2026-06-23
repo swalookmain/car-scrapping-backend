@@ -26,6 +26,7 @@ import { NotificationModule } from './notification/notification.module';
 import { SubscriptionModule } from './subscription/subscription.module';
 import { StorageModule } from './common/storage/storage.module';
 import { AuthorizationLetterModule } from './authorization-letter/authorization-letter.module';
+import { PartCatalogModule } from './part-catalog/part-catalog.module';
 
 @Module({
   imports: [
@@ -52,6 +53,7 @@ import { AuthorizationLetterModule } from './authorization-letter/authorization-
     NotificationModule,
     SubscriptionModule,
     AuthorizationLetterModule,
+    PartCatalogModule,
   ],
   controllers: [AppController],
   providers: [AppService, AuditLogInterceptor],
