@@ -54,6 +54,12 @@ export class Inventory extends Document {
   @Prop({ type: String, required: true })
   partName: string;
 
+  @Prop({ type: Types.ObjectId, ref: 'CatalogPart' })
+  catalogPartId?: Types.ObjectId;
+
+  @Prop({ trim: true })
+  catalogPartCode?: string;
+
   @Prop({ type: String, required: true })
   vechileModel: string;
 

@@ -124,6 +124,10 @@ export class InventoryService {
           vechileModel,
           partName: part.partName,
           partType: part.partType,
+          ...(part.catalogPartId
+            ? { catalogPartId: new Types.ObjectId(part.catalogPartId) }
+            : {}),
+          ...(part.catalogPartCode ? { catalogPartCode: part.catalogPartCode } : {}),
           openingStock,
           quantityReceived,
           quantityIssued,

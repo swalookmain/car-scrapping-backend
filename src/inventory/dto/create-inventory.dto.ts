@@ -28,6 +28,16 @@ export class CreateInventoryItemDto {
   @IsString()
   partName: string;
 
+  @ApiPropertyOptional()
+  @IsMongoId()
+  @IsOptional()
+  catalogPartId?: string;
+
+  @ApiPropertyOptional()
+  @IsString()
+  @IsOptional()
+  catalogPartCode?: string;
+
   @ApiProperty({ enum: PartType })
   @IsEnum(PartType)
   partType: PartType;
