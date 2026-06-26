@@ -1,6 +1,8 @@
 import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
 import { Document, Types } from 'mongoose';
 import { RtoStatus } from 'src/common/enum/rtoStatus.enum';
+import { Invoice } from 'src/invoice/invoice.schema';
+import { VechileInvoice } from 'src/invoice/vechile-invoice.schema';
 
 @Schema({ timestamps: true, collection: 'vehicle_cod_records' })
 export class VehicleCodRecord extends Document {
@@ -9,13 +11,13 @@ export class VehicleCodRecord extends Document {
 
   @Prop({
     type: Types.ObjectId,
-    ref: 'vechileinvoices',
+    ref: VechileInvoice.name,
     required: true,
     unique: true,
   })
   vehicleId: Types.ObjectId;
 
-  @Prop({ type: Types.ObjectId, ref: 'invoices', required: true })
+  @Prop({ type: Types.ObjectId, ref: Invoice.name, required: true })
   invoiceId: Types.ObjectId;
 
   @Prop({ type: Boolean, default: false, required: true })

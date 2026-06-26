@@ -16,6 +16,7 @@ import { GetUser } from 'src/common/decorators/user.decorator';
 import type { AuthenticatedUser } from 'src/common/interface/authenticated-user.interface';
 import { PartCatalogService } from './part-catalog.service';
 import { AddVariantPartDto } from './dto/add-variant-part.dto';
+import { CreatePartCategoryDto } from './dto/create-part-category.dto';
 import { VehicleType } from 'src/common/enum/vehicleType.enum';
 
 @ApiTags('Part Catalog')
@@ -24,6 +25,20 @@ import { VehicleType } from 'src/common/enum/vehicleType.enum';
 @UseGuards(jwtAuthGuard, RolesGuard)
 export class PartCatalogController {
   constructor(private readonly partCatalogService: PartCatalogService) {}
+
+  @Get('categories')
+  @Roles(Role.ADMIN, Role.STAFF)
+  @ApiOperation({ summary: 'List all part categories' })
+  getCategories() {
+    return this.partCatalogService.getPartCategories();
+  }
+
+  @Post('categories')
+  @Roles(Role.ADMIN, Role.STAFF)
+  @ApiOperation({ summary: 'Create a new part category (duplicate check on slug)' })
+  createCategory(@Body() dto: CreatePartCategoryDto) {
+    return this.partCatalogService.createPartCategory(dto);
+  }
 
   @Get('makes')
   @Roles(Role.ADMIN, Role.STAFF)

@@ -27,6 +27,7 @@ import { SubscriptionModule } from './subscription/subscription.module';
 import { StorageModule } from './common/storage/storage.module';
 import { AuthorizationLetterModule } from './authorization-letter/authorization-letter.module';
 import { PartCatalogModule } from './part-catalog/part-catalog.module';
+import { DashboardModule } from './dashboard/dashboard.module';
 
 @Module({
   imports: [
@@ -54,6 +55,7 @@ import { PartCatalogModule } from './part-catalog/part-catalog.module';
     SubscriptionModule,
     AuthorizationLetterModule,
     PartCatalogModule,
+    DashboardModule,
   ],
   controllers: [AppController],
   providers: [AppService, AuditLogInterceptor],

@@ -20,7 +20,13 @@ import {
   VEHICLE_TYPE_TEMPLATE_CODES,
 } from './data/catalog-seed.data';
 import { AddVariantPartDto } from './dto/add-variant-part.dto';
+import { CreatePartCategoryDto } from './dto/create-part-category.dto';
 import { VehicleInvoiceRepository } from 'src/invoice/vehicle-invoice.repository';
+import {
+  formatPartTypeLabel,
+  normalizePartType,
+  SYSTEM_PART_TYPE_SLUGS,
+} from 'src/common/utils/part-type.util';
 
 @Injectable()
 export class PartCatalogService implements OnModuleInit {
@@ -33,6 +39,7 @@ export class PartCatalogService implements OnModuleInit {
 
   async onModuleInit() {
     try {
+      await this.seedPartCategories();
       const count = await this.repo.countCatalogParts();
       if (count === 0) {
         await this.seedCatalog();
@@ -41,6 +48,19 @@ export class PartCatalogService implements OnModuleInit {
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Unknown seed error';
       this.logger.warn(`Part catalog seed skipped: ${message}`);
+    }
+  }
+
+  private async seedPartCategories() {
+    for (const slug of SYSTEM_PART_TYPE_SLUGS) {
+      const existing = await this.repo.findPartCategoryBySlug(slug);
+      if (existing) continue;
+      await this.repo.createPartCategory({
+        slug,
+        label: formatPartTypeLabel(slug),
+        isSystem: true,
+        isActive: true,
+      });
     }
   }
 
@@ -68,7 +88,7 @@ export class PartCatalogService implements OnModuleInit {
       const doc = await this.repo.upsertCatalogPart({
         code: part.code,
         name: part.name,
-        partType: part.partType,
+        partType: normalizePartType(part.partType),
         category: part.category,
         defaultQty: part.defaultQty ?? 1,
         sortOrder: part.sortOrder,
@@ -193,7 +213,7 @@ export class PartCatalogService implements OnModuleInit {
       catalogPartId: catalogPart._id.toString(),
       code: catalogPart.code,
       partName: catalogPart.name,
-      partType: catalogPart.partType,
+      partType: normalizePartType(catalogPart.partType),
       category: catalogPart.category,
       defaultQty,
       sortOrder,
@@ -205,6 +225,51 @@ export class PartCatalogService implements OnModuleInit {
 
   async getMakes() {
     return this.repo.findAllMakes();
+  }
+
+  async getPartCategories() {
+    const rows = await this.repo.findAllPartCategories();
+    return rows.map((row) => ({
+      slug: row.slug,
+      label: row.label || formatPartTypeLabel(row.slug),
+      isSystem: row.isSystem ?? false,
+    }));
+  }
+
+  async createPartCategory(dto: CreatePartCategoryDto) {
+    const slug = normalizePartType(dto.name);
+    if (!slug) {
+      throw new BadRequestException('Category name is required');
+    }
+    const existing = await this.repo.findPartCategoryBySlug(slug);
+    if (existing) {
+      throw new BadRequestException('Category already exists');
+    }
+    const created = await this.repo.createPartCategory({
+      slug,
+      label: formatPartTypeLabel(slug),
+      isSystem: false,
+      isActive: true,
+    });
+    return {
+      slug: created.slug,
+      label: created.label,
+      isSystem: false,
+    };
+  }
+
+  private async ensurePartCategory(slug: string) {
+    const normalized = normalizePartType(slug);
+    let category = await this.repo.findPartCategoryBySlug(normalized);
+    if (!category) {
+      category = await this.repo.createPartCategory({
+        slug: normalized,
+        label: formatPartTypeLabel(normalized),
+        isSystem: false,
+        isActive: true,
+      });
+    }
+    return category;
   }
 
   async getModels(makeId: string) {
@@ -382,6 +447,9 @@ export class PartCatalogService implements OnModuleInit {
     const name = dto.partName.trim();
     if (!name) throw new BadRequestException('Part name is required');
 
+    const partType = normalizePartType(dto.partType);
+    await this.ensurePartCategory(partType);
+
     const code = (dto.code?.trim() || this.codeFromName(name)).toUpperCase();
     const existing = await this.repo.findCatalogPartByCode(code);
     const catalogPart =
@@ -389,7 +457,7 @@ export class PartCatalogService implements OnModuleInit {
       (await this.repo.upsertCatalogPart({
         code,
         name,
-        partType: dto.partType,
+        partType,
         category: dto.category,
         defaultQty: dto.defaultQty ?? 1,
         sortOrder: 900,

@@ -2,6 +2,7 @@ import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
 import { Document, Types } from 'mongoose';
 import { YardVehicleStatus } from 'src/common/enum/yardVehicleStatus.enum';
 import { YardSourceType } from 'src/common/enum/yardSourceType.enum';
+import { Invoice } from 'src/invoice/invoice.schema';
 
 @Schema({ timestamps: true })
 export class YardVehicle extends Document {
@@ -11,7 +12,7 @@ export class YardVehicle extends Document {
   @Prop({ type: Types.ObjectId, ref: 'VechileInvoice', required: true })
   vehicleInvoiceId: Types.ObjectId;
 
-  @Prop({ type: Types.ObjectId, ref: 'invoices', required: true })
+  @Prop({ type: Types.ObjectId, ref: Invoice.name, required: true })
   invoiceId: Types.ObjectId;
 
   @Prop({ type: String, required: true, trim: true })
