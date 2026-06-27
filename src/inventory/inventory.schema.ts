@@ -1,7 +1,6 @@
 import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
 import { Types, Document } from 'mongoose';
 import { Condition } from 'src/common/enum/condition.enum';
-import { PartType } from 'src/common/enum/partType.enum';
 import { Status } from 'src/common/enum/status.enum';
 
 @Schema({ _id: false, timestamps: false })
@@ -63,8 +62,8 @@ export class Inventory extends Document {
   @Prop({ type: String, required: true })
   vechileModel: string;
 
-  @Prop({ enum: PartType, required: true })
-  partType: PartType;
+  @Prop({ type: String, required: true, trim: true, lowercase: true })
+  partType: string;
 
   @Prop({ type: Number, required: true })
   openingStock: number;

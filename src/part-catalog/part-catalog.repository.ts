@@ -13,12 +13,18 @@ import {
   VehicleTypeTemplatePart,
   VehicleTypeTemplatePartDocument,
 } from './schemas/vehicle-type-template-part.schema';
+import {
+  PartCategory,
+  PartCategoryDocument,
+} from './schemas/part-category.schema';
 
 @Injectable()
 export class PartCatalogRepository {
   constructor(
     @InjectModel(CatalogPart.name)
     private readonly catalogPartModel: Model<CatalogPartDocument>,
+    @InjectModel(PartCategory.name)
+    private readonly partCategoryModel: Model<PartCategoryDocument>,
     @InjectModel(VehicleMake.name)
     private readonly makeModel: Model<VehicleMakeDocument>,
     @InjectModel(VehicleModel.name)
@@ -146,5 +152,27 @@ export class PartCatalogRepository {
 
   findVariantById(id: string) {
     return this.variantModel.findById(id).populate('modelId').lean();
+  }
+
+  findAllPartCategories() {
+    return this.partCategoryModel
+      .find({ isActive: true })
+      .sort({ label: 1 })
+      .lean();
+  }
+
+  findPartCategoryBySlug(slug: string) {
+    return this.partCategoryModel.findOne({
+      slug: slug.toLowerCase(),
+      isActive: true,
+    });
+  }
+
+  createPartCategory(data: Partial<PartCategory>) {
+    return this.partCategoryModel.create(data);
+  }
+
+  countPartCategories() {
+    return this.partCategoryModel.countDocuments();
   }
 }

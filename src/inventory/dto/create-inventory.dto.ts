@@ -12,8 +12,8 @@ import {
   ValidateNested,
 } from 'class-validator';
 import { Type } from 'class-transformer';
+import { Transform } from 'class-transformer';
 import { Condition } from 'src/common/enum/condition.enum';
-import { PartType } from 'src/common/enum/partType.enum';
 import { Status } from 'src/common/enum/status.enum';
 
 export class CreateInventoryItemDto {
@@ -38,9 +38,12 @@ export class CreateInventoryItemDto {
   @IsOptional()
   catalogPartCode?: string;
 
-  @ApiProperty({ enum: PartType })
-  @IsEnum(PartType)
-  partType: PartType;
+  @ApiProperty({ description: 'Part category slug (stored lowercase)' })
+  @IsString()
+  @Transform(({ value }) =>
+    typeof value === 'string' ? value.trim().toLowerCase() : value,
+  )
+  partType: string;
 
   @ApiProperty()
   @IsNumber()

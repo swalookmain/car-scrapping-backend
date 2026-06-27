@@ -12,6 +12,10 @@ import {
   VehicleTypeTemplatePart,
   VehicleTypeTemplatePartSchema,
 } from './schemas/vehicle-type-template-part.schema';
+import {
+  PartCategory,
+  PartCategorySchema,
+} from './schemas/part-category.schema';
 import { PartCatalogRepository } from './part-catalog.repository';
 import { PartCatalogService } from './part-catalog.service';
 import { PartCatalogController } from './part-catalog.controller';
@@ -30,6 +34,7 @@ import { InvoiceModule } from 'src/invoice/invoice.module';
         name: VehicleTypeTemplatePart.name,
         schema: VehicleTypeTemplatePartSchema,
       },
+      { name: PartCategory.name, schema: PartCategorySchema },
     ]),
   ],
   controllers: [PartCatalogController],

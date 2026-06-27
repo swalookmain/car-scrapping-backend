@@ -1,7 +1,6 @@
 import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
 import { Document } from 'mongoose';
 import { CatalogPartCategory } from 'src/common/enum/catalogPartCategory.enum';
-import { PartType } from 'src/common/enum/partType.enum';
 
 @Schema({ timestamps: true })
 export class CatalogPart extends Document {
@@ -11,8 +10,8 @@ export class CatalogPart extends Document {
   @Prop({ required: true, trim: true })
   name: string;
 
-  @Prop({ enum: PartType, required: true })
-  partType: PartType;
+  @Prop({ type: String, required: true, trim: true, lowercase: true })
+  partType: string;
 
   @Prop({ enum: CatalogPartCategory, default: CatalogPartCategory.SALEABLE })
   category: CatalogPartCategory;

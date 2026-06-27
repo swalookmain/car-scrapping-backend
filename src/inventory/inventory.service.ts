@@ -24,6 +24,7 @@ import { PaginatedResponse } from 'src/common/interface/paginated-response.inter
 import { getPagination } from 'src/common/utils/pagination.util';
 import type { Inventory } from './inventory.schema';
 import { YardService } from 'src/yard/yard.service';
+import { normalizePartType } from 'src/common/utils/part-type.util';
 
 @Injectable()
 export class InventoryService {
@@ -123,7 +124,7 @@ export class InventoryService {
           purchaseInvoiceNumber: invoice.invoiceNumber,
           vechileModel,
           partName: part.partName,
-          partType: part.partType,
+          partType: normalizePartType(part.partType),
           ...(part.catalogPartId
             ? { catalogPartId: new Types.ObjectId(part.catalogPartId) }
             : {}),

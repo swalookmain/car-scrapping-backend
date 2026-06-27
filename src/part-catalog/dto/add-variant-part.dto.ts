@@ -1,6 +1,6 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
+import { Transform } from 'class-transformer';
 import { IsEnum, IsInt, IsOptional, IsString, Min } from 'class-validator';
-import { PartType } from 'src/common/enum/partType.enum';
 import { CatalogPartCategory } from 'src/common/enum/catalogPartCategory.enum';
 
 export class AddVariantPartDto {
@@ -8,9 +8,12 @@ export class AddVariantPartDto {
   @IsString()
   partName: string;
 
-  @ApiProperty({ enum: PartType })
-  @IsEnum(PartType)
-  partType: PartType;
+  @ApiProperty({ description: 'Part category slug (stored lowercase)' })
+  @IsString()
+  @Transform(({ value }) =>
+    typeof value === 'string' ? value.trim().toLowerCase() : value,
+  )
+  partType: string;
 
   @ApiPropertyOptional({ enum: CatalogPartCategory, default: CatalogPartCategory.SALEABLE })
   @IsOptional()

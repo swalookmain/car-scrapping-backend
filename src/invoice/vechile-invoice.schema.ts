@@ -3,10 +3,11 @@ import { Document, Types } from 'mongoose';
 import { FuelType } from '../common/enum/fuelType.enum';
 import { VechicleStatus } from '../common/enum/vechicleStatus.enum';
 import { VehicleType } from '../common/enum/vehicleType.enum';
+import { Invoice } from './invoice.schema';
 
 @Schema({ timestamps: true })
 export class VechileInvoice extends Document {
-  @Prop({ type: Types.ObjectId, ref: 'invoices', required: true })
+  @Prop({ type: Types.ObjectId, ref: Invoice.name, required: true })
   invoiceId: Types.ObjectId;
 
   @Prop({ type: Types.ObjectId, ref: 'organizations', required: true })
