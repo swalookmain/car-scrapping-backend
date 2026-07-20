@@ -13,13 +13,13 @@ import {
   VehicleTypeTemplatePartSchema,
 } from './schemas/vehicle-type-template-part.schema';
 import {
-  PartCategory,
-  PartCategorySchema,
-} from './schemas/part-category.schema';
-import {
   CatalogPartOrgDefaults,
   CatalogPartOrgDefaultsSchema,
 } from './schemas/catalog-part-org-defaults.schema';
+import {
+  PartCategory,
+  PartCategorySchema,
+} from './schemas/part-category.schema';
 import { PartCatalogRepository } from './part-catalog.repository';
 import { PartCatalogService } from './part-catalog.service';
 import { PartCatalogController } from './part-catalog.controller';
