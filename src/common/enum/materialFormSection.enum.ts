@@ -1,0 +1,12 @@
+export enum MaterialFormSection {
+  OUTWARDS = 'OUTWARDS',
+  HAZ_REPROCESS = 'HAZ_REPROCESS',
+  HAZ_LANDFILL = 'HAZ_LANDFILL',
+}
+
+export enum InventoryFormBucket {
+  OUTWARDS = 'OUTWARDS',
+  HAZ_REPROCESS = 'HAZ_REPROCESS',
+  HAZ_LANDFILL = 'HAZ_LANDFILL',
+  UNMAPPED = 'UNMAPPED',
+}

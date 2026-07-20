@@ -51,6 +51,10 @@ export class YardVehicle extends Document {
   @Prop({ type: Date })
   parkedAt?: Date;
 
+  /** Whole-vehicle weight captured at park / vehicle detail (KGS) */
+  @Prop({ type: Number, min: 0 })
+  grossWeightKg?: number;
+
   @Prop({ type: Date })
   dismantlingStartedAt?: Date;
 

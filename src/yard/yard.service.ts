@@ -362,13 +362,20 @@ export class YardService {
     const fromStatus = yardVehicle.currentStatus;
     const toStatus = sanitized.status;
 
-    if (fromStatus === toStatus && !sanitized.zoneId && !sanitized.slot) {
+    if (
+      fromStatus === toStatus &&
+      !sanitized.zoneId &&
+      !sanitized.slot &&
+      sanitized.grossWeightKg === undefined
+    ) {
       return yardVehicle;
     }
 
-    this.assertTransition(fromStatus, toStatus);
+    if (fromStatus !== toStatus) {
+      this.assertTransition(fromStatus, toStatus);
+    }
 
-    if (toStatus === YardVehicleStatus.PARKED && !sanitized.zoneId) {
+    if (toStatus === YardVehicleStatus.PARKED && !sanitized.zoneId && fromStatus !== toStatus) {
       throw new BadRequestException('Zone is required when parking a vehicle');
     }
 
@@ -389,35 +396,49 @@ export class YardService {
     if (sanitized.slot !== undefined) {
       updateData.currentSlot = sanitized.slot?.trim() || undefined;
     }
+    if (sanitized.grossWeightKg !== undefined) {
+      updateData.grossWeightKg = sanitized.grossWeightKg;
+    }
 
     const now = new Date();
-    if (toStatus === YardVehicleStatus.GATE_IN) updateData.gateInAt = now;
-    if (toStatus === YardVehicleStatus.PARKED) updateData.parkedAt = now;
-    if (toStatus === YardVehicleStatus.EXITED) updateData.exitedAt = now;
+    if (fromStatus !== toStatus) {
+      if (toStatus === YardVehicleStatus.GATE_IN) updateData.gateInAt = now;
+      if (toStatus === YardVehicleStatus.PARKED) updateData.parkedAt = now;
+      if (toStatus === YardVehicleStatus.EXITED) updateData.exitedAt = now;
+    }
 
     const updated = await this.yardVehicleRepository.updateById(
       yardVehicle._id.toString(),
       updateData,
     );
 
-    await this.recordMovement({
-      orgId,
-      yardVehicleId: yardVehicle._id,
-      fromStatus,
-      toStatus,
-      fromZoneId: yardVehicle.currentZoneId as Types.ObjectId | undefined,
-      toZoneId,
-      fromSlot: yardVehicle.currentSlot,
-      toSlot: sanitized.slot,
-      notes: sanitized.notes,
-      source: 'YARD_UI',
-      performedBy: userId,
-    });
+    if (sanitized.grossWeightKg !== undefined) {
+      await this.vehicleInvoiceRepository.updateById(
+        yardVehicle.vehicleInvoiceId.toString(),
+        { grossWeightKg: sanitized.grossWeightKg },
+      );
+    }
 
-    await this.logAudit(authenticatedUser, AuditAction.YARD_STATUS_UPDATE, id, {
-      fromStatus,
-      toStatus,
-    });
+    if (fromStatus !== toStatus) {
+      await this.recordMovement({
+        orgId,
+        yardVehicleId: yardVehicle._id,
+        fromStatus,
+        toStatus,
+        fromZoneId: yardVehicle.currentZoneId as Types.ObjectId | undefined,
+        toZoneId,
+        fromSlot: yardVehicle.currentSlot,
+        toSlot: sanitized.slot,
+        notes: sanitized.notes,
+        source: 'YARD_UI',
+        performedBy: userId,
+      });
+
+      await this.logAudit(authenticatedUser, AuditAction.YARD_STATUS_UPDATE, id, {
+        fromStatus,
+        toStatus,
+      });
+    }
 
     return updated;
   }
@@ -490,7 +511,11 @@ export class YardService {
       await this.yardVehicleRepository.findByVehicleInvoiceId(vehicleInvoiceId);
     if (!yardVehicle) return;
 
-    if (yardVehicle.currentStatus !== YardVehicleStatus.DISMANTLING_IN_PROGRESS) {
+    const allowed: YardVehicleStatus[] = [
+      YardVehicleStatus.DISMANTLING_IN_PROGRESS,
+      YardVehicleStatus.DISMANTLED,
+    ];
+    if (!allowed.includes(yardVehicle.currentStatus)) {
       throw new BadRequestException(
         'Vehicle must be in dismantling progress. Start dismantling from Yard or Inventory first.',
       );
@@ -515,6 +540,16 @@ export class YardService {
 
     if (yardVehicle.organizationId?.toString() !== orgId) {
       throw new BadRequestException('Yard vehicle does not belong to organization');
+    }
+
+    const vehicleDoc = await this.vehicleInvoiceRepository.findById(
+      validVehicleInvoiceId,
+    );
+    if (!vehicleDoc?.grossWeightKg && !yardVehicle.grossWeightKg) {
+      this.logger.warn(
+        `Vehicle ${validVehicleInvoiceId} dismantled without grossWeightKg — FORM-3 export will be blocked until set`,
+        'YardService',
+      );
     }
 
     const fromStatus = yardVehicle.currentStatus;

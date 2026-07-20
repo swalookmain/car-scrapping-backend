@@ -1,6 +1,7 @@
 import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
 import { Document, Types } from 'mongoose';
 import { FuelType } from '../common/enum/fuelType.enum';
+import { FormVehicleClass } from '../common/enum/formVehicleClass.enum';
 import { VechicleStatus } from '../common/enum/vechicleStatus.enum';
 import { VehicleType } from '../common/enum/vehicleType.enum';
 import { Invoice } from './invoice.schema';
@@ -31,6 +32,14 @@ export class VechileInvoice extends Document {
   // Vehicle Identity
   @Prop({ enum: VehicleType, required: true })
   vehicle_type: VehicleType;
+
+  /** FORM-3 L/M/N/OTHER — defaults from vehicle_type */
+  @Prop({ enum: FormVehicleClass })
+  formVehicleClass?: FormVehicleClass;
+
+  /** Whole-vehicle inbound mass for FORM-3 Inwards (KGS) */
+  @Prop({ type: Number, min: 0 })
+  grossWeightKg?: number;
 
   @Prop({ type: String, required: true })
   make: string;

@@ -25,6 +25,12 @@ import { getPagination } from 'src/common/utils/pagination.util';
 import type { Inventory } from './inventory.schema';
 import { YardService } from 'src/yard/yard.service';
 import { normalizePartType } from 'src/common/utils/part-type.util';
+import { MaterialMasterService } from 'src/material-master/material-master.service';
+import { PartCatalogService } from 'src/part-catalog/part-catalog.service';
+import { InventoryFormBucket } from 'src/common/enum/materialFormSection.enum';
+import { WeightUnit } from 'src/common/enum/weightUnit.enum';
+import { StateOfMatter } from 'src/common/enum/stateOfMatter.enum';
+import { MatterClass } from 'src/common/enum/matterClass.enum';
 
 @Injectable()
 export class InventoryService {
@@ -34,6 +40,8 @@ export class InventoryService {
     private readonly vehicleInvoiceRepo: VehicleInvoiceRepository,
     @Inject(forwardRef(() => YardService))
     private readonly yardService: YardService,
+    private readonly materialMasterService: MaterialMasterService,
+    private readonly partCatalogService: PartCatalogService,
     @Inject(WINSTON_MODULE_NEST_PROVIDER)
     private readonly logger: LoggerService,
   ) {}
@@ -68,81 +76,108 @@ export class InventoryService {
       if (vechileInvoice.invoiceId?.toString() !== invoiceId) {
         throw new BadRequestException('Vehicle does not belong to invoice');
       }
-      if (existingParts) {
-        throw new BadRequestException('Dismantling already completed');
-      }
 
       await this.yardService.assertCanCreateInventory(vechileId);
+
+      const orgId =
+        (vechileInvoice as { organizationId?: Types.ObjectId }).organizationId?.toString() ||
+        authenticatedUser.orgId;
+      if (!orgId) {
+        throw new BadRequestException('Organization not found');
+      }
 
       const vechileModel =
         (vechileInvoice as { model_name?: string }).model_name ?? 'UNKNOWN';
 
       const parts = sanitizedData.parts ?? [];
-      const records = parts.map((part) => {
-        const openingStock = this.ensureNumber(part.openingStock, 'openingStock');
-        const quantityReceived = this.ensureNumber(
-          part.quantityReceived ?? 0,
-          'quantityReceived',
-        );
-        const quantityIssued = this.ensureNumber(
-          part.quantityIssued ?? 0,
-          'quantityIssued',
-        );
-
-        if (quantityIssued > openingStock + quantityReceived) {
-          throw new BadRequestException(
-            `Quantity issued exceeds available for part ${part.partName}`,
+      const records = await Promise.all(
+        parts.map(async (part) => {
+          const openingStock = this.ensureNumber(part.openingStock, 'openingStock');
+          const quantityReceived = this.ensureNumber(
+            part.quantityReceived ?? 0,
+            'quantityReceived',
           );
-        }
-        if (part.condition === Condition.DAMAGED && quantityIssued > 0) {
-          throw new BadRequestException(
-            `Damaged part cannot be issued: ${part.partName}`,
+          const quantityIssued = this.ensureNumber(
+            part.quantityIssued ?? 0,
+            'quantityIssued',
           );
-        }
 
-        const availableQuantity = this.calculateAvailableQuantity(
-          openingStock,
-          quantityReceived,
-          quantityIssued,
-        );
-        const status = this.calculateStatus(
-          part.condition,
-          availableQuantity,
-          quantityIssued,
-        );
+          if (quantityIssued > openingStock + quantityReceived) {
+            throw new BadRequestException(
+              `Quantity issued exceeds available for part ${part.partName}`,
+            );
+          }
+          if (part.condition === Condition.DAMAGED && quantityIssued > 0) {
+            throw new BadRequestException(
+              `Damaged part cannot be issued: ${part.partName}`,
+            );
+          }
 
-        return {
-          invoiceId: new Types.ObjectId(invoiceId),
-          vechileId: new Types.ObjectId(vechileId),
-          auctionId:
-            (vechileInvoice as { auctionId?: Types.ObjectId }).auctionId ||
-            undefined,
-          lotId: (vechileInvoice as { lotId?: Types.ObjectId }).lotId || undefined,
-          auctionVehicleId:
-            (vechileInvoice as { auctionVehicleId?: Types.ObjectId })
-              .auctionVehicleId || undefined,
-          purchaseInvoiceNumber: invoice.invoiceNumber,
-          vechileModel,
-          partName: part.partName,
-          partType: normalizePartType(part.partType),
-          ...(part.catalogPartId
-            ? { catalogPartId: new Types.ObjectId(part.catalogPartId) }
-            : {}),
-          ...(part.catalogPartCode ? { catalogPartCode: part.catalogPartCode } : {}),
-          openingStock,
-          quantityReceived,
-          quantityIssued,
-          availableQuantity,
-          condition: part.condition,
-          status,
-          unitPrice: part.unitPrice,
-          documents: this.normalizeDocuments(part.documents, authenticatedUser),
-          createdBy: new Types.ObjectId(authenticatedUser.userId),
-        };
-      });
+          const availableQuantity = this.calculateAvailableQuantity(
+            openingStock,
+            quantityReceived,
+            quantityIssued,
+          );
+          const status = this.calculateStatus(
+            part.condition,
+            availableQuantity,
+            quantityIssued,
+          );
+
+          const massFields = await this.resolveMassFields(part, orgId);
+
+          if (part.catalogPartId) {
+            await this.partCatalogService.rememberOrgDefaults(
+              orgId,
+              part.catalogPartId,
+              {
+                stateOfMatter: massFields.stateOfMatter,
+                materialCode: massFields.materialCode,
+                matterClass: massFields.matterClass,
+                weightUnit: massFields.weightUnit,
+              },
+            );
+          }
+
+          return {
+            invoiceId: new Types.ObjectId(invoiceId),
+            vechileId: new Types.ObjectId(vechileId),
+            auctionId:
+              (vechileInvoice as { auctionId?: Types.ObjectId }).auctionId ||
+              undefined,
+            lotId:
+              (vechileInvoice as { lotId?: Types.ObjectId }).lotId || undefined,
+            auctionVehicleId:
+              (vechileInvoice as { auctionVehicleId?: Types.ObjectId })
+                .auctionVehicleId || undefined,
+            purchaseInvoiceNumber: invoice.invoiceNumber,
+            vechileModel,
+            partName: part.partName,
+            partType: normalizePartType(part.partType),
+            ...(part.catalogPartId
+              ? { catalogPartId: new Types.ObjectId(part.catalogPartId) }
+              : {}),
+            ...(part.catalogPartCode
+              ? { catalogPartCode: part.catalogPartCode }
+              : {}),
+            openingStock,
+            quantityReceived,
+            quantityIssued,
+            availableQuantity,
+            condition: part.condition,
+            status,
+            unitPrice: part.unitPrice,
+            ...massFields,
+            documents: this.normalizeDocuments(part.documents, authenticatedUser),
+            createdBy: new Types.ObjectId(authenticatedUser.userId),
+          };
+        }),
+      );
 
       const created = await this.inventoryRepo.createMany(records);
-      await this.yardService.completeDismantling(vechileId, authenticatedUser);
+      if (!existingParts) {
+        await this.yardService.completeDismantling(vechileId, authenticatedUser);
+      }
       return created;
     } catch (error) {
       if (error instanceof BadRequestException || error instanceof NotFoundException) {
@@ -263,14 +298,104 @@ export class InventoryService {
       nextQuantityIssued,
     );
 
-    const updateData = {
+    const updateData: Record<string, unknown> = {
       ...sanitizedData,
       availableQuantity: nextAvailable,
       status: nextStatus,
       updatedBy: new Types.ObjectId(authenticatedUser.userId),
     };
 
+    if (sanitizedData.partType) {
+      updateData.partType = normalizePartType(sanitizedData.partType);
+    }
+
+    const orgId =
+      authenticatedUser.orgId ||
+      (
+        await this.vehicleInvoiceRepo.findById(existing.vechileId.toString())
+      )?.organizationId?.toString();
+
+    if (
+      orgId &&
+      (sanitizedData.materialCode !== undefined ||
+        sanitizedData.stateOfMatter !== undefined ||
+        sanitizedData.matterClass !== undefined ||
+        sanitizedData.weightUnit !== undefined ||
+        sanitizedData.weightKg !== undefined)
+    ) {
+      const massFields = await this.resolveMassFields(
+        {
+          materialCode:
+            sanitizedData.materialCode ?? existing.materialCode,
+          stateOfMatter:
+            sanitizedData.stateOfMatter ?? existing.stateOfMatter,
+          matterClass: sanitizedData.matterClass ?? existing.matterClass,
+          weightUnit: sanitizedData.weightUnit ?? existing.weightUnit,
+          weightKg:
+            sanitizedData.weightKg !== undefined
+              ? sanitizedData.weightKg
+              : existing.weightKg,
+        },
+        orgId,
+      );
+      Object.assign(updateData, massFields);
+
+      const catalogPartId =
+        sanitizedData.catalogPartId ||
+        existing.catalogPartId?.toString();
+      if (catalogPartId) {
+        await this.partCatalogService.rememberOrgDefaults(
+          orgId,
+          catalogPartId,
+          {
+            stateOfMatter: massFields.stateOfMatter,
+            materialCode: massFields.materialCode,
+            matterClass: massFields.matterClass,
+            weightUnit: massFields.weightUnit,
+          },
+        );
+      }
+    }
+
     return this.inventoryRepo.updateById(validatedId, updateData);
+  }
+
+  async findByVehicle(vechileId: string) {
+    const validatedId = validateObjectId(vechileId, 'Vehicle ID');
+    const vehicle = await this.vehicleInvoiceRepo.findById(validatedId);
+    if (!vehicle || vehicle.isDeleted) {
+      throw new NotFoundException('Vehicle not found');
+    }
+    const parts = await this.inventoryRepo.findByVehicleId(validatedId);
+    const totalWeightKg = parts.reduce(
+      (sum, p) => sum + (typeof p.weightKg === 'number' ? p.weightKg : 0),
+      0,
+    );
+    return {
+      vehicle,
+      parts,
+      partCount: parts.length,
+      totalWeightKg,
+      grossWeightKg: vehicle.grossWeightKg ?? 0,
+    };
+  }
+
+  async findVehicles(filters: {
+    page?: number;
+    limit?: number;
+    search?: string;
+    organizationId?: string;
+  }) {
+    const { page: safePage, limit: safeLimit } = getPagination(
+      filters.page,
+      filters.limit,
+    );
+    return this.inventoryRepo.aggregateVehicles({
+      page: safePage,
+      limit: safeLimit,
+      search: filters.search,
+      organizationId: filters.organizationId,
+    });
   }
 
   async remove(id: string) {
@@ -280,6 +405,53 @@ export class InventoryService {
       throw new NotFoundException('Inventory not found');
     }
     return { message: 'Inventory deleted successfully' };
+  }
+
+  private async resolveMassFields(
+    part: {
+      materialCode?: string;
+      stateOfMatter?: string;
+      matterClass?: string;
+      weightUnit?: string;
+      weightKg?: number;
+    },
+    organizationId: string,
+  ) {
+    const weightKg =
+      part.weightKg !== undefined && part.weightKg !== null
+        ? this.ensureNumber(part.weightKg, 'weightKg')
+        : undefined;
+    const weightUnit = (part.weightUnit as WeightUnit) || WeightUnit.KG;
+
+    let formBucket: InventoryFormBucket = InventoryFormBucket.UNMAPPED;
+    let materialCode = part.materialCode?.trim().toUpperCase() || undefined;
+    let matterClass = part.matterClass as MatterClass | undefined;
+    let stateOfMatter = part.stateOfMatter as StateOfMatter | undefined;
+
+    if (materialCode) {
+      const material = await this.materialMasterService.resolveByCode(
+        materialCode,
+        organizationId,
+      );
+      if (material) {
+        formBucket = material.formSection as unknown as InventoryFormBucket;
+        if (!matterClass) matterClass = material.matterClass;
+        if (!stateOfMatter && material.defaultStateOfMatter) {
+          stateOfMatter = material.defaultStateOfMatter;
+        }
+      } else {
+        formBucket = InventoryFormBucket.UNMAPPED;
+      }
+    }
+
+    return {
+      weightKg,
+      weightUnit,
+      stateOfMatter,
+      materialCode,
+      matterClass,
+      formBucket: materialCode ? formBucket : InventoryFormBucket.UNMAPPED,
+    };
   }
 
   private calculateAvailableQuantity(

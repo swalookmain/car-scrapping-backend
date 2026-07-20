@@ -1,0 +1,144 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: Arial, Helvetica, sans-serif; font-size: 11px; color: #111; padding: 16px 18px; }
+    h1 { text-align: center; font-size: 14px; margin-bottom: 4px; text-transform: uppercase; }
+    .sub { text-align: center; font-size: 10px; margin-bottom: 12px; }
+    .meta { margin-bottom: 10px; }
+    .meta div { margin: 2px 0; }
+    table { width: 100%; border-collapse: collapse; margin-bottom: 12px; }
+    th, td { border: 1px solid #222; padding: 4px 6px; text-align: center; }
+    th { background: #f0f0f0; font-size: 10px; }
+    td.label, th.label { text-align: left; }
+    .section { font-weight: bold; margin: 10px 0 4px; text-transform: uppercase; font-size: 12px; }
+    .subhead { font-weight: bold; margin: 6px 0 3px; font-size: 11px; }
+    .num { text-align: right; }
+    .total-row td { font-weight: bold; background: #f7f7f7; }
+  </style>
+</head>
+<body>
+  <h1>FORM-3</h1>
+  <div class="sub">[Refer rules 10(xxi), 14(2) and 14 (3)] ANNUAL RETURN FOR FINANCIAL YEAR {{header.financialYear}}</div>
+  <div class="sub">Period: {{header.periodLabel}}</div>
+
+  <div class="meta">
+    <div><strong>NAME:</strong> {{header.name}}</div>
+    <div><strong>REGISTRATION NUMBER:</strong> {{header.registrationNumber}}</div>
+    <div><strong>VALIDITY:</strong> {{header.validity}}</div>
+  </div>
+
+  <div class="section">1. Capacity Utilisation (NOS)</div>
+  <div class="subhead">A. Deregistration</div>
+  <table>
+    <thead>
+      <tr>
+        <th class="label">Vehicle Type</th>
+        <th>COMPLETED (1)</th>
+        <th>IN PROCESS (2)</th>
+        <th>TOTAL (1+2)</th>
+      </tr>
+    </thead>
+    <tbody>
+      {{#each capacity.deregistration}}
+      <tr>
+        <td class="label">{{label}}</td>
+        <td>{{completed}}</td>
+        <td>{{inProcess}}</td>
+        <td>{{total}}</td>
+      </tr>
+      {{/each}}
+      <tr class="total-row">
+        <td class="label">TOTAL (A)</td>
+        <td>{{capacity.deregistrationTotals.completed}}</td>
+        <td>{{capacity.deregistrationTotals.inProcess}}</td>
+        <td>{{capacity.deregistrationTotals.total}}</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <div class="subhead">B. Treatment</div>
+  <table>
+    <thead>
+      <tr>
+        <th class="label">Vehicle Type</th>
+        <th>AUTHORISED (1)</th>
+        <th>UTILISED (2)</th>
+        <th>% UTILISATION</th>
+      </tr>
+    </thead>
+    <tbody>
+      {{#each capacity.treatment}}
+      <tr>
+        <td class="label">{{label}}</td>
+        <td>{{authorised}}</td>
+        <td>{{utilised}}</td>
+        <td>{{utilisationPct}}</td>
+      </tr>
+      {{/each}}
+    </tbody>
+  </table>
+
+  <div class="section">2. Mass Flow (KGS)</div>
+  <div class="subhead">A. Inwards</div>
+  <table>
+    <thead>
+      <tr><th class="label">Vehicle Type</th><th>Weight (KGS)</th></tr>
+    </thead>
+    <tbody>
+      {{#each massFlow.inwards}}
+      <tr><td class="label">{{label}}</td><td class="num">{{kg}}</td></tr>
+      {{/each}}
+      <tr class="total-row"><td class="label">GRAND TOTAL (A)</td><td class="num">{{massFlow.inwardsGrandTotal}}</td></tr>
+    </tbody>
+  </table>
+
+  <div class="subhead">B. Outwards</div>
+  <table>
+    <thead>
+      <tr><th class="label">Material</th><th>Weight (KGS)</th></tr>
+    </thead>
+    <tbody>
+      {{#each massFlow.outwards}}
+      <tr><td class="label">{{label}}</td><td class="num">{{kg}}</td></tr>
+      {{/each}}
+      <tr class="total-row"><td class="label">SUB-TOTAL (i)</td><td class="num">{{massFlow.outwardsSubTotal}}</td></tr>
+    </tbody>
+  </table>
+
+  <div class="subhead">C. Hazardous Waste for Reprocessing</div>
+  <table>
+    <thead>
+      <tr><th class="label">Category</th><th>Weight (KGS)</th></tr>
+    </thead>
+    <tbody>
+      {{#each massFlow.hazReprocess}}
+      <tr><td class="label">{{label}}</td><td class="num">{{kg}}</td></tr>
+      {{/each}}
+      <tr class="total-row"><td class="label">SUB-TOTAL (ii)</td><td class="num">{{massFlow.hazReprocessSubTotal}}</td></tr>
+    </tbody>
+  </table>
+
+  <div class="subhead">D. Hazardous Waste to Landfill</div>
+  <table>
+    <thead>
+      <tr><th class="label">Category</th><th>Weight (KGS)</th></tr>
+    </thead>
+    <tbody>
+      {{#each massFlow.hazLandfill}}
+      <tr><td class="label">{{label}}</td><td class="num">{{kg}}</td></tr>
+      {{/each}}
+      <tr class="total-row"><td class="label">SUB-TOTAL (iii)</td><td class="num">{{massFlow.hazLandfillSubTotal}}</td></tr>
+    </tbody>
+  </table>
+
+  <table>
+    <tbody>
+      <tr class="total-row"><td class="label">E. GRAND TOTAL (B) = (i)+(ii)+(iii)</td><td class="num">{{massFlow.grandTotalOut}}</td></tr>
+      <tr class="total-row"><td class="label">F. MASS BALANCE (A-B)</td><td class="num">{{massFlow.massBalance}}</td></tr>
+    </tbody>
+  </table>
+</body>
+</html>

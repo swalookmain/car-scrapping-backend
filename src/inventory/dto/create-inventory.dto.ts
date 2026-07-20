@@ -15,6 +15,9 @@ import { Type } from 'class-transformer';
 import { Transform } from 'class-transformer';
 import { Condition } from 'src/common/enum/condition.enum';
 import { Status } from 'src/common/enum/status.enum';
+import { MatterClass } from 'src/common/enum/matterClass.enum';
+import { StateOfMatter } from 'src/common/enum/stateOfMatter.enum';
+import { WeightUnit } from 'src/common/enum/weightUnit.enum';
 
 export class CreateInventoryItemDto {
   @ApiPropertyOptional({ description: 'Optional documents metadata for the part' })
@@ -67,6 +70,35 @@ export class CreateInventoryItemDto {
   @Min(0)
   @IsOptional()
   unitPrice?: number;
+
+  @ApiPropertyOptional({ description: 'Mass in KG for FORM-3' })
+  @IsNumber()
+  @Min(0)
+  @IsOptional()
+  weightKg?: number;
+
+  @ApiPropertyOptional({ enum: WeightUnit })
+  @IsEnum(WeightUnit)
+  @IsOptional()
+  weightUnit?: WeightUnit;
+
+  @ApiPropertyOptional({ enum: StateOfMatter })
+  @IsEnum(StateOfMatter)
+  @IsOptional()
+  stateOfMatter?: StateOfMatter;
+
+  @ApiPropertyOptional()
+  @IsString()
+  @IsOptional()
+  @Transform(({ value }) =>
+    typeof value === 'string' ? value.trim().toUpperCase() : value,
+  )
+  materialCode?: string;
+
+  @ApiPropertyOptional({ enum: MatterClass })
+  @IsEnum(MatterClass)
+  @IsOptional()
+  matterClass?: MatterClass;
 
   @ApiProperty({ enum: Condition })
   @IsEnum(Condition)

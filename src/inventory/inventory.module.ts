@@ -6,6 +6,8 @@ import { Inventory, InventorySchema } from './inventory.schema';
 import { InventoryRepository } from './inventory.repository';
 import { InvoiceModule } from 'src/invoice/invoice.module';
 import { YardModule } from 'src/yard/yard.module';
+import { MaterialMasterModule } from 'src/material-master/material-master.module';
+import { PartCatalogModule } from 'src/part-catalog/part-catalog.module';
 
 @Module({
   imports: [
@@ -14,6 +16,8 @@ import { YardModule } from 'src/yard/yard.module';
     ]),
     InvoiceModule,
     forwardRef(() => YardModule),
+    MaterialMasterModule,
+    PartCatalogModule,
   ],
   controllers: [InventoryController],
   providers: [InventoryService, InventoryRepository],

@@ -29,6 +29,10 @@ export class SalesInvoiceItem extends Document {
 
   @Prop({ type: Number, required: true, min: 0 })
   lineTotal: number;
+
+  /** Mass sold in KG; deducted from inventory.weightKg on confirm */
+  @Prop({ type: Number, min: 0 })
+  soldWeightKg?: number;
 }
 
 export type SalesInvoiceItemDocument = SalesInvoiceItem & Document;

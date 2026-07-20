@@ -28,6 +28,8 @@ import { StorageModule } from './common/storage/storage.module';
 import { AuthorizationLetterModule } from './authorization-letter/authorization-letter.module';
 import { PartCatalogModule } from './part-catalog/part-catalog.module';
 import { DashboardModule } from './dashboard/dashboard.module';
+import { MaterialMasterModule } from './material-master/material-master.module';
+import { InventoryAuditModule } from './inventory-audit/inventory-audit.module';
 
 @Module({
   imports: [
@@ -56,6 +58,8 @@ import { DashboardModule } from './dashboard/dashboard.module';
     AuthorizationLetterModule,
     PartCatalogModule,
     DashboardModule,
+    MaterialMasterModule,
+    InventoryAuditModule,
   ],
   controllers: [AppController],
   providers: [AppService, AuditLogInterceptor],

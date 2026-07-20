@@ -8,6 +8,10 @@
       {
         "include": "authorization-letter/templates/**/*",
         "outDir": "dist"
+      },
+      {
+        "include": "inventory-audit/templates/**/*",
+        "outDir": "dist"
       }
     ]
   }

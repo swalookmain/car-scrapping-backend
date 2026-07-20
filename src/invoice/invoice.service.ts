@@ -17,6 +17,9 @@ import { Types } from 'mongoose';
 import type { LoggerService } from '@nestjs/common';
 import { sanitizeObject, validateObjectId } from 'src/common/utils/security.util';
 import { assertSupportedDocumentFile } from 'src/common/utils/document-upload.util';
+import { FormVehicleClass } from 'src/common/enum/formVehicleClass.enum';
+import { VehicleType } from 'src/common/enum/vehicleType.enum';
+import { defaultFormVehicleClass } from 'src/common/utils/form-vehicle-class.util';
 import { AuthenticatedUser } from 'src/common/interface/authenticated-user.interface';
 import { CreateVechileInvoiceDto } from './dto/create-vechile-invoice.dto';
 import { CreateVechileInvoiceBatchDto } from './dto/create-vechile-invoice-batch.dto';
@@ -279,9 +282,17 @@ export class InvoiceService {
           typeof normalizedData.vehicle_purchase_date === 'string'
             ? normalizedData.vehicle_purchase_date
             : undefined;
+        const vehicleType =
+          (normalizedData.vehicle_type as VehicleType) || VehicleType.CAR;
+        const formVehicleClass: FormVehicleClass =
+          (normalizedData.formVehicleClass as FormVehicleClass | undefined) ||
+          defaultFormVehicleClass(vehicleType);
+
         const vechileInvoice = await this.vehicleInvoiceRepository.create(
           {
             ...normalizedData,
+            vehicle_type: vehicleType,
+            formVehicleClass,
             invoiceId: new Types.ObjectId(sanitizedData.invoiceId),
             organizationId: new Types.ObjectId(orgId),
             ...(vehiclePurchaseDateValue

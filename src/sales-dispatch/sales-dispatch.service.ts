@@ -49,6 +49,7 @@ type InventoryLike = {
   openingStock: number;
   quantityReceived: number;
   condition: Condition;
+  weightKg?: number;
 };
 
 type SalesInvoiceWithBuyer = Record<string, unknown> & {
@@ -79,6 +80,7 @@ type SalesInvoiceItemLike = {
   quantity: number;
   unitPrice: number;
   lineTotal: number;
+  soldWeightKg?: number;
 };
 
 @Injectable()
@@ -564,6 +566,26 @@ export class SalesDispatchService {
           );
         }
 
+        const stockWeight =
+          typeof (part as { weightKg?: number }).weightKg === 'number'
+            ? (part as { weightKg?: number }).weightKg!
+            : 0;
+        const soldWeight =
+          typeof item.soldWeightKg === 'number' ? item.soldWeightKg : 0;
+
+        if (stockWeight > 0) {
+          if (!(soldWeight > 0)) {
+            throw new BadRequestException(
+              `Sold weight (KG) is required for item ${item.itemCode}`,
+            );
+          }
+          if (soldWeight > stockWeight) {
+            throw new BadRequestException(
+              `Sold weight exceeds available KG for item ${item.itemCode}`,
+            );
+          }
+        }
+
         const codGenerated =
           await this.vehicleComplianceRepository.hasGeneratedCodForVehicle(
             part.vechileId.toString(),
@@ -577,10 +599,13 @@ export class SalesDispatchService {
         const nextQuantityIssued = part.quantityIssued + item.quantity;
         const nextAvailableQuantity =
           part.openingStock + part.quantityReceived - nextQuantityIssued;
+        const nextWeightKg =
+          stockWeight > 0 ? Math.max(0, stockWeight - soldWeight) : stockWeight;
 
         await this.inventoryRepository.updateById(part._id.toString(), {
           quantityIssued: nextQuantityIssued,
           availableQuantity: nextAvailableQuantity,
+          ...(stockWeight > 0 ? { weightKg: nextWeightKg } : {}),
           status: this.calculateStatus(
             part.condition,
             nextAvailableQuantity,
@@ -597,6 +622,7 @@ export class SalesDispatchService {
           referenceType: InventoryReferenceType.SALES_INVOICE,
           referenceId: existing.invoice._id,
           quantity: item.quantity,
+          ...(soldWeight > 0 ? { weightKg: soldWeight } : {}),
           createdBy: new Types.ObjectId(authenticatedUser.userId),
         });
       }
@@ -649,13 +675,23 @@ export class SalesDispatchService {
           );
         }
 
+        const soldWeight =
+          typeof item.soldWeightKg === 'number' ? item.soldWeightKg : 0;
+        const currentWeight =
+          typeof (part as { weightKg?: number }).weightKg === 'number'
+            ? (part as { weightKg?: number }).weightKg!
+            : 0;
+
         const nextQuantityIssued = part.quantityIssued - item.quantity;
         const nextAvailableQuantity =
           part.openingStock + part.quantityReceived - nextQuantityIssued;
+        const nextWeightKg =
+          soldWeight > 0 ? currentWeight + soldWeight : currentWeight;
 
         await this.inventoryRepository.updateById(part._id.toString(), {
           quantityIssued: nextQuantityIssued,
           availableQuantity: nextAvailableQuantity,
+          ...(soldWeight > 0 ? { weightKg: nextWeightKg } : {}),
           status: this.calculateStatus(
             part.condition,
             nextAvailableQuantity,
@@ -671,6 +707,7 @@ export class SalesDispatchService {
           referenceType: InventoryReferenceType.SALES_INVOICE,
           referenceId: existing.invoice._id,
           quantity: item.quantity,
+          ...(soldWeight > 0 ? { weightKg: soldWeight } : {}),
           createdBy: new Types.ObjectId(authenticatedUser.userId),
         });
       }
@@ -727,6 +764,24 @@ export class SalesDispatchService {
         throw new BadRequestException(`Insufficient available quantity for ${item.itemCode}`);
       }
 
+      const stockWeight =
+        typeof part.weightKg === 'number' ? part.weightKg : 0;
+      const soldWeight =
+        typeof item.soldWeightKg === 'number' ? item.soldWeightKg : undefined;
+
+      if (stockWeight > 0) {
+        if (soldWeight == null || !(soldWeight > 0)) {
+          throw new BadRequestException(
+            `Sold weight (KG) is required for ${item.itemCode}`,
+          );
+        }
+        if (soldWeight > stockWeight) {
+          throw new BadRequestException(
+            `Sold weight exceeds available KG for ${item.itemCode}`,
+          );
+        }
+      }
+
       return {
         partId: part._id,
         itemCode: item.itemCode,
@@ -735,6 +790,9 @@ export class SalesDispatchService {
         quantity: item.quantity,
         unitPrice: item.unitPrice,
         lineTotal: item.quantity * item.unitPrice,
+        ...(soldWeight != null && soldWeight > 0
+          ? { soldWeightKg: soldWeight }
+          : {}),
       };
     });
   }

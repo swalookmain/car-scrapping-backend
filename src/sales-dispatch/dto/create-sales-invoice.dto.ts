@@ -31,6 +31,14 @@ export class CreateSalesInvoiceItemDto {
   @IsNumber()
   @Min(0)
   unitPrice: number;
+
+  @ApiPropertyOptional({
+    description: 'Sold mass in KG (required when inventory part has weightKg > 0)',
+  })
+  @IsNumber()
+  @Min(0)
+  @IsOptional()
+  soldWeightKg?: number;
 }
 
 export class CreateSalesInvoiceDto {

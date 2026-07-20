@@ -30,19 +30,18 @@ async function bootstrap() {
     }),
   );
 
-  // Security: CORS configuration
-  // app.enableCors({
-  //   origin: process.env.ALLOWED_ORIGINS?.split(',') || [
-  //     'http://localhost:3000',
-  //   ],
-  //   credentials: true,
-  //   methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
-  //   allowedHeaders: ['Content-Type', 'Authorization'],
-  // });
+  // Security: CORS — ALLOWED_ORIGINS (comma-separated) for AWS/prod; permissive fallback for local
+  const allowedOrigins = process.env.ALLOWED_ORIGINS
+    ?.split(',')
+    .map((o) => o.trim())
+    .filter(Boolean);
+
   app.enableCors({
-  origin: true, 
-  credentials: true,
-});
+    origin: allowedOrigins?.length ? allowedOrigins : true,
+    credentials: true,
+    methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
+    allowedHeaders: ['Content-Type', 'Authorization'],
+  });
 
 
 

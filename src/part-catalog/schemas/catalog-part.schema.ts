@@ -1,6 +1,9 @@
 import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
 import { Document } from 'mongoose';
 import { CatalogPartCategory } from 'src/common/enum/catalogPartCategory.enum';
+import { MatterClass } from 'src/common/enum/matterClass.enum';
+import { StateOfMatter } from 'src/common/enum/stateOfMatter.enum';
+import { WeightUnit } from 'src/common/enum/weightUnit.enum';
 
 @Schema({ timestamps: true })
 export class CatalogPart extends Document {
@@ -24,6 +27,18 @@ export class CatalogPart extends Document {
 
   @Prop({ default: true })
   isActive: boolean;
+
+  @Prop({ enum: StateOfMatter })
+  defaultStateOfMatter?: StateOfMatter;
+
+  @Prop({ trim: true, uppercase: true })
+  defaultMaterialCode?: string;
+
+  @Prop({ enum: MatterClass })
+  matterClass?: MatterClass;
+
+  @Prop({ enum: WeightUnit, default: WeightUnit.PCS })
+  defaultWeightUnit?: WeightUnit;
 }
 
 export type CatalogPartDocument = CatalogPart & Document;

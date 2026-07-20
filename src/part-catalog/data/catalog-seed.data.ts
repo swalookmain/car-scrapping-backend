@@ -9,6 +9,10 @@ export interface SeedCatalogPart {
   category: CatalogPartCategory;
   defaultQty?: number;
   sortOrder: number;
+  defaultMaterialCode?: string;
+  matterClass?: string;
+  defaultStateOfMatter?: string;
+  defaultWeightUnit?: string;
 }
 
 export const SALEABLE_COMMERCIAL_PARTS: SeedCatalogPart[] = [
@@ -16,13 +20,13 @@ export const SALEABLE_COMMERCIAL_PARTS: SeedCatalogPart[] = [
   { code: 'FR_DIFF', name: 'Front Differential', partType: PartType.TRANSMISSION, category: CatalogPartCategory.SALEABLE, sortOrder: 20 },
   { code: 'CABIN', name: 'Cabin', partType: PartType.BODY, category: CatalogPartCategory.SALEABLE, sortOrder: 30 },
   { code: 'RIM', name: 'Rim', partType: PartType.BODY, category: CatalogPartCategory.SALEABLE, defaultQty: 4, sortOrder: 40 },
-  { code: 'TYRE', name: 'Tyre', partType: PartType.BODY, category: CatalogPartCategory.SALEABLE, defaultQty: 4, sortOrder: 50 },
+  { code: 'TYRE', name: 'Tyre', partType: PartType.BODY, category: CatalogPartCategory.SALEABLE, defaultQty: 4, sortOrder: 50, defaultMaterialCode: 'TYRES', matterClass: 'NON_METAL', defaultStateOfMatter: 'SOLID', defaultWeightUnit: 'KG' },
   { code: 'KAMANI', name: 'Kamani (Leaf Spring)', partType: PartType.SUSPENSION, category: CatalogPartCategory.SALEABLE, sortOrder: 60 },
   { code: 'CHASSIS', name: 'Chassis', partType: PartType.BODY, category: CatalogPartCategory.SALEABLE, sortOrder: 70 },
   { code: 'RADIATOR', name: 'Radiator', partType: PartType.ENGINE, category: CatalogPartCategory.SALEABLE, sortOrder: 80 },
   { code: 'STEERING_BOX', name: 'Steering Box', partType: PartType.SUSPENSION, category: CatalogPartCategory.SALEABLE, sortOrder: 90 },
   { code: 'SHAFT', name: 'Prop Shaft', partType: PartType.TRANSMISSION, category: CatalogPartCategory.SALEABLE, sortOrder: 100 },
-  { code: 'BATTERY', name: 'Battery', partType: PartType.ELECTRICAL, category: CatalogPartCategory.SALEABLE, sortOrder: 110 },
+  { code: 'BATTERY', name: 'Battery', partType: PartType.ELECTRICAL, category: CatalogPartCategory.SALEABLE, sortOrder: 110, defaultMaterialCode: 'BATTERIES', matterClass: 'OTHER', defaultStateOfMatter: 'SOLID', defaultWeightUnit: 'KG' },
   { code: 'WIRING', name: 'Wiring Harness', partType: PartType.ELECTRICAL, category: CatalogPartCategory.SALEABLE, sortOrder: 120 },
   { code: 'FUEL_TANK', name: 'Fuel Tank', partType: PartType.EXHAUST, category: CatalogPartCategory.SALEABLE, sortOrder: 130 },
   { code: 'SPECIAL_GEAR', name: 'Special Gear', partType: PartType.TRANSMISSION, category: CatalogPartCategory.SALEABLE, sortOrder: 140 },
@@ -30,12 +34,72 @@ export const SALEABLE_COMMERCIAL_PARTS: SeedCatalogPart[] = [
 ];
 
 export const SCRAP_PARTS: SeedCatalogPart[] = [
-  { code: 'SCRAP_KAMANI_KG', name: 'Kamani Scrap (KG)', partType: PartType.OTHER, category: CatalogPartCategory.SCRAP, sortOrder: 200 },
-  { code: 'SCRAP_PLASTIC_KG', name: 'Plastic Scrap (KG)', partType: PartType.PLASTIC, category: CatalogPartCategory.SCRAP, sortOrder: 210 },
-  { code: 'SCRAP_AL_KG', name: 'Aluminium Scrap (KG)', partType: PartType.OTHER, category: CatalogPartCategory.SCRAP, sortOrder: 220 },
-  { code: 'SCRAP_CU_KG', name: 'Copper Scrap (KG)', partType: PartType.ELECTRICAL, category: CatalogPartCategory.SCRAP, sortOrder: 230 },
-  { code: 'SCRAP_IRON_KG', name: 'Iron Scrap (KG)', partType: PartType.OTHER, category: CatalogPartCategory.SCRAP, sortOrder: 240 },
-  { code: 'SCRAP_LOOSE', name: 'Loose Scrap', partType: PartType.OTHER, category: CatalogPartCategory.SCRAP, sortOrder: 250 },
+  {
+    code: 'SCRAP_KAMANI_KG',
+    name: 'Kamani Scrap (KG)',
+    partType: PartType.OTHER,
+    category: CatalogPartCategory.SCRAP,
+    sortOrder: 200,
+    defaultMaterialCode: 'FERROUS',
+    matterClass: 'METAL',
+    defaultStateOfMatter: 'SOLID',
+    defaultWeightUnit: 'KG',
+  },
+  {
+    code: 'SCRAP_PLASTIC_KG',
+    name: 'Plastic Scrap (KG)',
+    partType: PartType.PLASTIC,
+    category: CatalogPartCategory.SCRAP,
+    sortOrder: 210,
+    defaultMaterialCode: 'PLASTICS',
+    matterClass: 'NON_METAL',
+    defaultStateOfMatter: 'SOLID',
+    defaultWeightUnit: 'KG',
+  },
+  {
+    code: 'SCRAP_AL_KG',
+    name: 'Aluminium Scrap (KG)',
+    partType: PartType.OTHER,
+    category: CatalogPartCategory.SCRAP,
+    sortOrder: 220,
+    defaultMaterialCode: 'ALUMINIUM',
+    matterClass: 'METAL',
+    defaultStateOfMatter: 'SOLID',
+    defaultWeightUnit: 'KG',
+  },
+  {
+    code: 'SCRAP_CU_KG',
+    name: 'Copper Scrap (KG)',
+    partType: PartType.ELECTRICAL,
+    category: CatalogPartCategory.SCRAP,
+    sortOrder: 230,
+    defaultMaterialCode: 'COPPER',
+    matterClass: 'METAL',
+    defaultStateOfMatter: 'SOLID',
+    defaultWeightUnit: 'KG',
+  },
+  {
+    code: 'SCRAP_IRON_KG',
+    name: 'Iron Scrap (KG)',
+    partType: PartType.OTHER,
+    category: CatalogPartCategory.SCRAP,
+    sortOrder: 240,
+    defaultMaterialCode: 'FERROUS',
+    matterClass: 'METAL',
+    defaultStateOfMatter: 'SOLID',
+    defaultWeightUnit: 'KG',
+  },
+  {
+    code: 'SCRAP_LOOSE',
+    name: 'Loose Scrap',
+    partType: PartType.OTHER,
+    category: CatalogPartCategory.SCRAP,
+    sortOrder: 250,
+    defaultMaterialCode: 'FERROUS',
+    matterClass: 'OTHER',
+    defaultStateOfMatter: 'SOLID',
+    defaultWeightUnit: 'KG',
+  },
 ];
 
 export const CAR_GENERIC_PARTS: SeedCatalogPart[] = [
