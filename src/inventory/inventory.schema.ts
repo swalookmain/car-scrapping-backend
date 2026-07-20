@@ -2,6 +2,10 @@ import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
 import { Types, Document } from 'mongoose';
 import { Condition } from 'src/common/enum/condition.enum';
 import { Status } from 'src/common/enum/status.enum';
+import { InventoryFormBucket } from 'src/common/enum/materialFormSection.enum';
+import { MatterClass } from 'src/common/enum/matterClass.enum';
+import { StateOfMatter } from 'src/common/enum/stateOfMatter.enum';
+import { WeightUnit } from 'src/common/enum/weightUnit.enum';
 
 @Schema({ _id: false, timestamps: false })
 export class InventoryAttachment {
@@ -80,6 +84,28 @@ export class Inventory extends Document {
   @Prop({ type: Number })
   unitPrice?: number;
 
+  /** Mass for FORM-3 audit (always KG for aggregations) */
+  @Prop({ type: Number, min: 0 })
+  weightKg?: number;
+
+  @Prop({ enum: WeightUnit, default: WeightUnit.KG })
+  weightUnit?: WeightUnit;
+
+  @Prop({ enum: StateOfMatter })
+  stateOfMatter?: StateOfMatter;
+
+  @Prop({ trim: true, uppercase: true })
+  materialCode?: string;
+
+  @Prop({ enum: MatterClass })
+  matterClass?: MatterClass;
+
+  @Prop({
+    enum: InventoryFormBucket,
+    default: InventoryFormBucket.UNMAPPED,
+  })
+  formBucket?: InventoryFormBucket;
+
   @Prop({ enum: Condition, required: true })
   condition: Condition;
 
@@ -107,3 +133,7 @@ export class Inventory extends Document {
 
 export const InventorySchema = SchemaFactory.createForClass(Inventory);
 export type InventoryDocument = Inventory & Document;
+
+InventorySchema.index({ vechileId: 1, createdAt: 1 });
+InventorySchema.index({ materialCode: 1, formBucket: 1, createdAt: 1 });
+InventorySchema.index({ invoiceId: 1 });

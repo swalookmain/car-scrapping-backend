@@ -10,10 +10,14 @@ import {
   validateObjectId,
   sanitizeObject,
 } from 'src/common/utils/security.util';
+import { SubscriptionRepository } from '../subscription/subscription.repository';
 
 @Injectable()
 export class OrganizationsService {
-  constructor(private readonly organizationRepo: OrganizationsRepository) {}
+  constructor(
+    private readonly organizationRepo: OrganizationsRepository,
+    private readonly subscriptionRepo: SubscriptionRepository,
+  ) {}
 
   async create(organizationData: Partial<any>) {
     try {
@@ -35,6 +39,37 @@ export class OrganizationsService {
     }
   }
 
+  private async attachSubscriptions(orgs: any[]) {
+    if (!orgs?.length) return orgs;
+    const ids = orgs.map((o) => String(o._id || o.id)).filter(Boolean);
+    const subs = await this.subscriptionRepo.findLatestByOrganizationIds(ids);
+    const byOrg = new Map(
+      subs.map((s) => [
+        String(s._id),
+        {
+          subscriptionType: s.type,
+          plan: s.plan,
+          endDate: s.endDate,
+          status: s.status,
+          startDate: s.startDate,
+        },
+      ]),
+    );
+    return orgs.map((org) => {
+      const plain =
+        typeof org.toObject === 'function' ? org.toObject() : { ...org };
+      const sub = byOrg.get(String(plain._id || plain.id));
+      return {
+        ...plain,
+        subscriptionType: sub?.subscriptionType ?? null,
+        subscriptionPlan: sub?.plan ?? null,
+        subscriptionEndDate: sub?.endDate ?? null,
+        subscriptionStatus: sub?.status ?? null,
+        subscriptionStartDate: sub?.startDate ?? null,
+      };
+    });
+  }
+
   async findAll(
     page?: number,
     limit?: number,
@@ -47,9 +82,10 @@ export class OrganizationsService {
         safeLimit,
       );
       const totalPages = Math.ceil(total / safeLimit);
+      const enriched = await this.attachSubscriptions(data);
 
       return {
-        data,
+        data: enriched,
         meta: {
           page: safePage,
           limit: safeLimit,
@@ -58,7 +94,8 @@ export class OrganizationsService {
         },
       };
     }
-    return this.organizationRepo.findAll();
+    const all = await this.organizationRepo.findAll();
+    return this.attachSubscriptions(all);
   }
 
   async getById(id: string) {

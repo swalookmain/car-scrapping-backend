@@ -93,6 +93,14 @@ export class PartCatalogService implements OnModuleInit {
         defaultQty: part.defaultQty ?? 1,
         sortOrder: part.sortOrder,
         isActive: true,
+        ...(part.defaultMaterialCode
+          ? {
+              defaultMaterialCode: part.defaultMaterialCode,
+              matterClass: part.matterClass as never,
+              defaultStateOfMatter: part.defaultStateOfMatter as never,
+              defaultWeightUnit: part.defaultWeightUnit as never,
+            }
+          : {}),
       });
       partIdByCode.set(part.code, doc._id as Types.ObjectId);
     }
@@ -220,6 +228,13 @@ export class PartCatalogService implements OnModuleInit {
       source,
       variantId: variantId.toString(),
       included: catalogPart.category !== 'SCRAP',
+      defaultStateOfMatter: (catalogPart as { defaultStateOfMatter?: string })
+        .defaultStateOfMatter,
+      defaultMaterialCode: (catalogPart as { defaultMaterialCode?: string })
+        .defaultMaterialCode,
+      matterClass: (catalogPart as { matterClass?: string }).matterClass,
+      defaultWeightUnit: (catalogPart as { defaultWeightUnit?: string })
+        .defaultWeightUnit,
     };
   }
 
@@ -425,7 +440,7 @@ export class PartCatalogService implements OnModuleInit {
       vehicle.fuel_type as FuelType,
     );
 
-    return this.buildChecklistResponse(resolved, {
+    const response = await this.buildChecklistResponse(resolved, {
       vechileId: id,
       make: vehicle.make,
       model: vehicle.model_name,
@@ -433,6 +448,37 @@ export class PartCatalogService implements OnModuleInit {
       vehicleType,
       registrationNumber: vehicle.registration_number,
     });
+
+    const orgId = vehicle.organizationId?.toString();
+    if (orgId && Array.isArray(response.parts) && response.parts.length) {
+      const ids = response.parts
+        .map((p: { catalogPartId?: string }) => p.catalogPartId)
+        .filter(Boolean) as string[];
+      const defaults = await this.getOrgDefaultsMap(orgId, ids);
+      response.parts = response.parts.map(
+        (p: {
+          catalogPartId?: string;
+          defaultStateOfMatter?: string;
+          defaultMaterialCode?: string;
+          matterClass?: string;
+          defaultWeightUnit?: string;
+        }) => {
+          const d = p.catalogPartId ? defaults.get(p.catalogPartId) : undefined;
+          if (!d) return p;
+          return {
+            ...p,
+            defaultStateOfMatter: d.stateOfMatter || p.defaultStateOfMatter,
+            defaultMaterialCode: d.materialCode || p.defaultMaterialCode,
+            matterClass: d.matterClass || p.matterClass,
+            defaultWeightUnit: d.weightUnit || p.defaultWeightUnit,
+            stateOfMatter: d.stateOfMatter || p.defaultStateOfMatter,
+            materialCode: d.materialCode || p.defaultMaterialCode,
+          };
+        },
+      );
+    }
+
+    return response;
   }
 
   async addPartToVariant(
@@ -487,5 +533,57 @@ export class PartCatalogService implements OnModuleInit {
       CatalogPartSource.USER,
       new Types.ObjectId(id),
     );
+  }
+
+  async rememberOrgDefaults(
+    organizationId: string,
+    catalogPartId: string,
+    data: {
+      stateOfMatter?: string;
+      materialCode?: string;
+      matterClass?: string;
+      weightUnit?: string;
+    },
+  ) {
+    if (!organizationId || !catalogPartId) return null;
+    return this.repo.upsertOrgDefaults(organizationId, catalogPartId, data);
+  }
+
+  async getOrgDefaultsMap(
+    organizationId: string,
+    catalogPartIds: string[],
+  ): Promise<
+    Map<
+      string,
+      {
+        stateOfMatter?: string;
+        materialCode?: string;
+        matterClass?: string;
+        weightUnit?: string;
+      }
+    >
+  > {
+    const rows = await this.repo.findOrgDefaultsForParts(
+      organizationId,
+      catalogPartIds,
+    );
+    const map = new Map<
+      string,
+      {
+        stateOfMatter?: string;
+        materialCode?: string;
+        matterClass?: string;
+        weightUnit?: string;
+      }
+    >();
+    for (const row of rows) {
+      map.set(row.catalogPartId.toString(), {
+        stateOfMatter: row.stateOfMatter,
+        materialCode: row.materialCode,
+        matterClass: row.matterClass,
+        weightUnit: row.weightUnit,
+      });
+    }
+    return map;
   }
 }

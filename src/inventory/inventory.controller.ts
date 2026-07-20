@@ -78,6 +78,29 @@ export class InventoryController {
     });
   }
 
+  @Get('vehicles')
+  @Roles(Role.ADMIN, Role.STAFF)
+  @ApiOperation({ summary: 'List inventory grouped by vehicle' })
+  @ApiQuery({ name: 'search', required: false, type: String })
+  findVehicles(
+    @Query() query: PaginationQueryDto & { search?: string },
+    @GetUser() user: AuthenticatedUser,
+  ) {
+    return this.inventoryService.findVehicles({
+      page: query.page,
+      limit: query.limit,
+      search: query.search,
+      organizationId: user.orgId || undefined,
+    });
+  }
+
+  @Get('by-vehicle/:vechileId')
+  @Roles(Role.ADMIN, Role.STAFF)
+  @ApiOperation({ summary: 'Get all parts for a vehicle' })
+  findByVehicle(@Param('vechileId') vechileId: string) {
+    return this.inventoryService.findByVehicle(vechileId);
+  }
+
   @Get(':id')
   @Roles(Role.ADMIN, Role.STAFF)
   findOne(@Param('id') id: string) {

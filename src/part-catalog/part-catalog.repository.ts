@@ -17,6 +17,10 @@ import {
   PartCategory,
   PartCategoryDocument,
 } from './schemas/part-category.schema';
+import {
+  CatalogPartOrgDefaults,
+  CatalogPartOrgDefaultsDocument,
+} from './schemas/catalog-part-org-defaults.schema';
 
 @Injectable()
 export class PartCatalogRepository {
@@ -35,6 +39,8 @@ export class PartCatalogRepository {
     private readonly variantPartMapModel: Model<VariantPartMapDocument>,
     @InjectModel(VehicleTypeTemplatePart.name)
     private readonly templatePartModel: Model<VehicleTypeTemplatePartDocument>,
+    @InjectModel(CatalogPartOrgDefaults.name)
+    private readonly orgDefaultsModel: Model<CatalogPartOrgDefaultsDocument>,
   ) {}
 
   countCatalogParts() {
@@ -102,6 +108,53 @@ export class PartCatalogRepository {
     return this.catalogPartModel.findOneAndUpdate(
       { code: data.code?.toUpperCase() },
       { $set: data },
+      { upsert: true, new: true },
+    );
+  }
+
+  findOrgDefaults(organizationId: string, catalogPartId: string) {
+    return this.orgDefaultsModel
+      .findOne({
+        organizationId: new Types.ObjectId(organizationId),
+        catalogPartId: new Types.ObjectId(catalogPartId),
+      })
+      .lean();
+  }
+
+  findOrgDefaultsForParts(organizationId: string, catalogPartIds: string[]) {
+    if (!catalogPartIds.length) return Promise.resolve([]);
+    return this.orgDefaultsModel
+      .find({
+        organizationId: new Types.ObjectId(organizationId),
+        catalogPartId: {
+          $in: catalogPartIds.map((id) => new Types.ObjectId(id)),
+        },
+      })
+      .lean();
+  }
+
+  upsertOrgDefaults(
+    organizationId: string,
+    catalogPartId: string,
+    data: {
+      stateOfMatter?: string;
+      materialCode?: string;
+      matterClass?: string;
+      weightUnit?: string;
+    },
+  ) {
+    return this.orgDefaultsModel.findOneAndUpdate(
+      {
+        organizationId: new Types.ObjectId(organizationId),
+        catalogPartId: new Types.ObjectId(catalogPartId),
+      },
+      {
+        $set: data,
+        $setOnInsert: {
+          organizationId: new Types.ObjectId(organizationId),
+          catalogPartId: new Types.ObjectId(catalogPartId),
+        },
+      },
       { upsert: true, new: true },
     );
   }

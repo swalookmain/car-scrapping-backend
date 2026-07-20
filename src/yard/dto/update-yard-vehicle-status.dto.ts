@@ -1,5 +1,12 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { IsEnum, IsMongoId, IsOptional, IsString } from 'class-validator';
+import {
+  IsEnum,
+  IsMongoId,
+  IsNumber,
+  IsOptional,
+  IsString,
+  Min,
+} from 'class-validator';
 import { YardVehicleStatus } from 'src/common/enum/yardVehicleStatus.enum';
 
 export class UpdateYardVehicleStatusDto {
@@ -21,4 +28,10 @@ export class UpdateYardVehicleStatusDto {
   @IsOptional()
   @IsString()
   notes?: string;
+
+  @ApiPropertyOptional({ description: 'Whole vehicle weight in KG' })
+  @IsOptional()
+  @IsNumber()
+  @Min(0)
+  grossWeightKg?: number;
 }

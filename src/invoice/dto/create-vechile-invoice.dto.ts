@@ -9,6 +9,7 @@ import {
   IsString,
 } from 'class-validator';
 import { FuelType } from '../../common/enum/fuelType.enum';
+import { FormVehicleClass } from '../../common/enum/formVehicleClass.enum';
 import { VechicleStatus } from '../../common/enum/vechicleStatus.enum';
 import { VehicleType } from '../../common/enum/vehicleType.enum';
 
@@ -30,6 +31,16 @@ export class CreateVechileInvoiceDto {
   @ApiProperty({ enum: VehicleType })
   @IsEnum(VehicleType)
   vehicle_type: VehicleType;
+
+  @ApiPropertyOptional({ enum: FormVehicleClass })
+  @IsEnum(FormVehicleClass)
+  @IsOptional()
+  formVehicleClass?: FormVehicleClass;
+
+  @ApiPropertyOptional({ description: 'Whole vehicle weight in KG' })
+  @IsNumber()
+  @IsOptional()
+  grossWeightKg?: number;
 
   @ApiProperty()
   @IsString()

@@ -38,6 +38,8 @@ import { SubscriptionService } from '../subscription/subscription.service';
 import { UpdateSubscriptionDto } from '../subscription/dto/update-subscription.dto';
 import { OrganizationLetterSettingsService } from './organization-letter-settings.service';
 import { UpdateLetterSettingsDto } from './dto/update-letter-settings.dto';
+import { OrganizationFacilitySettingsService } from './organization-facility-settings.service';
+import { UpdateFacilitySettingsDto } from './dto/update-facility-settings.dto';
 
 const uploadStorage = memoryStorage();
 
@@ -50,6 +52,7 @@ export class OrganizationsController {
     private readonly organizationsService: OrganizationsService,
     private readonly subscriptionService: SubscriptionService,
     private readonly letterSettingsService: OrganizationLetterSettingsService,
+    private readonly facilitySettingsService: OrganizationFacilitySettingsService,
   ) {}
 
   @Post()
@@ -112,6 +115,23 @@ export class OrganizationsController {
   @ApiOperation({ summary: 'Get organization letterhead settings' })
   getLetterSettings(@GetUser() user: AuthenticatedUser) {
     return this.letterSettingsService.getForUser(user);
+  }
+
+  @Get('facility-settings')
+  @Roles(Role.ADMIN, Role.STAFF)
+  @ApiOperation({ summary: 'Get FORM-3 facility settings (header + authorised capacity)' })
+  getFacilitySettings(@GetUser() user: AuthenticatedUser) {
+    return this.facilitySettingsService.getForUser(user);
+  }
+
+  @Patch('facility-settings')
+  @Roles(Role.ADMIN)
+  @ApiOperation({ summary: 'Update FORM-3 facility settings' })
+  updateFacilitySettings(
+    @GetUser() user: AuthenticatedUser,
+    @Body() dto: UpdateFacilitySettingsDto,
+  ) {
+    return this.facilitySettingsService.updateForUser(user, dto);
   }
 
   @Patch('letter-settings')

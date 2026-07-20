@@ -23,6 +23,10 @@ export class InventoryMovement extends Document {
   @Prop({ type: Number, required: true, min: 1 })
   quantity: number;
 
+  /** Mass moved in KG (sales issue / cancel restore) */
+  @Prop({ type: Number, min: 0 })
+  weightKg?: number;
+
   @Prop({ type: Types.ObjectId, ref: 'User', required: true })
   createdBy: Types.ObjectId;
 }

@@ -32,6 +32,29 @@ export class SubscriptionRepository extends BaseRepository<Subscription> {
       .sort({ createdAt: -1 });
   }
 
+  /** Latest subscription per org (by createdAt). Returns lean docs. */
+  async findLatestByOrganizationIds(organizationIds: string[]) {
+    const objectIds = organizationIds
+      .filter(Boolean)
+      .map((id) => new Types.ObjectId(validateObjectId(id, 'Organization ID')));
+    if (!objectIds.length) return [];
+
+    return this.subscriptionModel.aggregate([
+      { $match: { organizationId: { $in: objectIds } } },
+      { $sort: { createdAt: -1 } },
+      {
+        $group: {
+          _id: '$organizationId',
+          type: { $first: '$type' },
+          plan: { $first: '$plan' },
+          endDate: { $first: '$endDate' },
+          status: { $first: '$status' },
+          startDate: { $first: '$startDate' },
+        },
+      },
+    ]);
+  }
+
   async findExpiredActive(beforeDate: Date) {
     return this.subscriptionModel.find({
       status: 'ACTIVE',

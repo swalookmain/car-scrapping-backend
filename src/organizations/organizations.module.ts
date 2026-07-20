@@ -11,6 +11,12 @@ import {
 } from './organization-letter-settings.schema';
 import { OrganizationLetterSettingsRepository } from './organization-letter-settings.repository';
 import { OrganizationLetterSettingsService } from './organization-letter-settings.service';
+import {
+  OrganizationFacilitySettings,
+  OrganizationFacilitySettingsSchema,
+} from './organization-facility-settings.schema';
+import { OrganizationFacilitySettingsRepository } from './organization-facility-settings.repository';
+import { OrganizationFacilitySettingsService } from './organization-facility-settings.service';
 
 @Module({
   imports: [
@@ -19,6 +25,10 @@ import { OrganizationLetterSettingsService } from './organization-letter-setting
       {
         name: OrganizationLetterSettings.name,
         schema: OrganizationLetterSettingsSchema,
+      },
+      {
+        name: OrganizationFacilitySettings.name,
+        schema: OrganizationFacilitySettingsSchema,
       },
     ]),
     forwardRef(() => SubscriptionModule),
@@ -29,12 +39,16 @@ import { OrganizationLetterSettingsService } from './organization-letter-setting
     OrganizationsRepository,
     OrganizationLetterSettingsRepository,
     OrganizationLetterSettingsService,
+    OrganizationFacilitySettingsRepository,
+    OrganizationFacilitySettingsService,
   ],
   exports: [
     OrganizationsService,
     OrganizationsRepository,
     OrganizationLetterSettingsService,
     OrganizationLetterSettingsRepository,
+    OrganizationFacilitySettingsService,
+    OrganizationFacilitySettingsRepository,
   ],
 })
 export class OrganizationsModule {}
