@@ -81,7 +81,7 @@ export class StorageService implements OnModuleInit {
       this.logger.log(`Storage provider: S3 (bucket: ${this.s3Bucket})`);
     } else {
       this.logger.warn(
-        'S3 selected but AWS_REGION, AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY, or AWS_S3_BUCKET is missing — uploads will fail until configured.',
+        'S3 selected but AWS_REGION, AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY, or AWS_BUCKET_NAME is missing — uploads will fail until configured.',
       );
     }
   }

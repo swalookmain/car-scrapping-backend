@@ -24,6 +24,11 @@ import { AuditAction } from 'src/common/enum/audit.enum';
 import { QueryYardVehicleDto } from './dto/query-yard-vehicle.dto';
 import { UpdateYardVehicleStatusDto } from './dto/update-yard-vehicle-status.dto';
 import { CreateYardZoneDto } from './dto/create-yard-zone.dto';
+import { AddFromAuctionDto } from './dto/add-from-auction.dto';
+import { AuctionLotRepository } from 'src/auction/auction-lot.repository';
+import { AuctionVehicleRepository } from 'src/auction/auction-vehicle.repository';
+import { AuctionRepository } from 'src/auction/auction.repository';
+import { LotOutcomeStatus } from 'src/common/enum/lotOutcomeStatus.enum';
 const DEFAULT_ZONES = [
   { name: 'Receiving', code: 'RECEIVING' },
   { name: 'Parking A', code: 'PARKING_A' },
@@ -39,6 +44,9 @@ export class YardService {
     private readonly yardZoneRepository: YardZoneRepository,
     private readonly invoiceRepository: InvoiceRepository,
     private readonly vehicleInvoiceRepository: VehicleInvoiceRepository,
+    private readonly auctionLotRepository: AuctionLotRepository,
+    private readonly auctionVehicleRepository: AuctionVehicleRepository,
+    private readonly auctionRepository: AuctionRepository,
     private readonly auditLogService: AuditLogService,
     @Inject(WINSTON_MODULE_NEST_PROVIDER)
     private readonly logger: LoggerService,
@@ -103,10 +111,36 @@ export class YardService {
 
     for (const vehicle of vehicles) {
       const vehicleInvoiceId = vehicle._id.toString();
-      const exists = await this.yardVehicleRepository.findByVehicleInvoiceId(
-        vehicleInvoiceId,
-      );
-      if (exists) continue;
+      const existsByInvoice =
+        await this.yardVehicleRepository.findByVehicleInvoiceId(
+          vehicleInvoiceId,
+        );
+      if (existsByInvoice) continue;
+
+      const auctionVehicleId = (
+        vehicle as { auctionVehicleId?: Types.ObjectId }
+      ).auctionVehicleId;
+      if (auctionVehicleId) {
+        const existsByAuction =
+          await this.yardVehicleRepository.findByAuctionVehicleId(
+            orgId,
+            auctionVehicleId.toString(),
+          );
+        if (existsByAuction) {
+          // Link purchase invoice IDs onto auction-parked yard row
+          if (!existsByAuction.vehicleInvoiceId || !existsByAuction.invoiceId) {
+            await this.yardVehicleRepository.updateById(
+              existsByAuction._id.toString(),
+              {
+                vehicleInvoiceId: vehicle._id,
+                invoiceId: new Types.ObjectId(validInvoiceId),
+                updatedBy: userId,
+              },
+            );
+          }
+          continue;
+        }
+      }
 
       await this.yardVehicleRepository.create({
         organizationId: new Types.ObjectId(orgId),
@@ -117,8 +151,8 @@ export class YardService {
         modelName: vehicle.model_name,
         leadId: invoice.leadId,
         auctionId: invoice.auctionId,
-        auctionVehicleId: (vehicle as { auctionVehicleId?: Types.ObjectId })
-          .auctionVehicleId,
+        lotId: (vehicle as { lotId?: Types.ObjectId }).lotId,
+        auctionVehicleId,
         sourceType,
         currentStatus: YardVehicleStatus.AWAITING_ARRIVAL,
         createdBy: userId,
@@ -412,7 +446,7 @@ export class YardService {
       updateData,
     );
 
-    if (sanitized.grossWeightKg !== undefined) {
+    if (sanitized.grossWeightKg !== undefined && yardVehicle.vehicleInvoiceId) {
       await this.vehicleInvoiceRepository.updateById(
         yardVehicle.vehicleInvoiceId.toString(),
         { grossWeightKg: sanitized.grossWeightKg },
@@ -623,5 +657,243 @@ export class YardService {
       isActive: true,
       createdBy: userId,
     });
+  }
+
+  async getEligibleAuctionLots(authenticatedUser: AuthenticatedUser) {
+    const orgId = this.getOrgId(authenticatedUser);
+    const lots = await this.auctionLotRepository.findAllByFilter({
+      organizationId: new Types.ObjectId(orgId),
+      outcomeStatus: LotOutcomeStatus.DEAL_DONE,
+    });
+
+    if (!lots.length) {
+      return { auctions: [] };
+    }
+
+    const auctionIds = [
+      ...new Set(lots.map((lot) => lot.auctionId.toString())),
+    ];
+    const auctions = await this.auctionRepository.findAllByFilter({
+      _id: { $in: auctionIds.map((id) => new Types.ObjectId(id)) },
+      organizationId: new Types.ObjectId(orgId),
+    });
+    const auctionMap = new Map(
+      auctions.map((a) => [a._id.toString(), a]),
+    );
+
+    const allVehicles = await this.auctionVehicleRepository.findAllByFilter({
+      organizationId: new Types.ObjectId(orgId),
+      lotId: { $in: lots.map((l) => l._id) },
+    });
+
+    const vehicleIds = allVehicles.map((v) => v._id.toString());
+    const existingYard =
+      await this.yardVehicleRepository.findByAuctionVehicleIds(
+        orgId,
+        vehicleIds,
+      );
+    const inYardSet = new Set(
+      existingYard
+        .map((y) => y.auctionVehicleId?.toString())
+        .filter(Boolean) as string[],
+    );
+
+    const vehiclesByLot = new Map<string, typeof allVehicles>();
+    for (const vehicle of allVehicles) {
+      const lotKey = vehicle.lotId.toString();
+      const list = vehiclesByLot.get(lotKey) || [];
+      list.push(vehicle);
+      vehiclesByLot.set(lotKey, list);
+    }
+
+    const lotsByAuction = new Map<string, typeof lots>();
+    for (const lot of lots) {
+      const key = lot.auctionId.toString();
+      const list = lotsByAuction.get(key) || [];
+      list.push(lot);
+      lotsByAuction.set(key, list);
+    }
+
+    const result = auctionIds
+      .map((auctionId) => {
+        const auction = auctionMap.get(auctionId);
+        if (!auction) return null;
+        const auctionLots = (lotsByAuction.get(auctionId) || []).map((lot) => {
+          const lotVehicles = vehiclesByLot.get(lot._id.toString()) || [];
+          return {
+            id: lot._id.toString(),
+            lotNumber: lot.lotNumber,
+            lotName: lot.lotName,
+            vehicleCount: lot.vehicleCount,
+            outcomeStatus: lot.outcomeStatus,
+            vehicles: lotVehicles.map((v) => {
+              const id = v._id.toString();
+              return {
+                id,
+                registrationNumber:
+                  v.registrationNumber || v.vehicleNumber || '',
+                make: v.make || '',
+                model: v.vehicleModel || '',
+                variant: v.variant || '',
+                vehicleType: v.vehicleType || '',
+                alreadyInYard: inYardSet.has(id),
+              };
+            }),
+          };
+        });
+        return {
+          id: auctionId,
+          auctionNumber: auction.auctionNumber,
+          buyerReferenceNumber: auction.buyerReferenceNumber,
+          status: auction.status,
+          lots: auctionLots,
+        };
+      })
+      .filter(Boolean);
+
+    return { auctions: result };
+  }
+
+  async addFromAuction(
+    dto: AddFromAuctionDto,
+    authenticatedUser: AuthenticatedUser,
+  ) {
+    const orgId = this.getOrgId(authenticatedUser);
+    const userId = this.getUserId(authenticatedUser);
+    const sanitized = sanitizeObject(dto) as AddFromAuctionDto;
+    const lotId = validateObjectId(sanitized.lotId, 'Lot ID');
+    const zoneId = validateObjectId(sanitized.zoneId, 'Zone ID');
+
+    await this.ensureDefaultZones(orgId, userId);
+
+    const lot = await this.auctionLotRepository.findByOrgAndId(orgId, lotId);
+    if (!lot) {
+      throw new NotFoundException('Auction lot not found');
+    }
+    if (lot.outcomeStatus !== LotOutcomeStatus.DEAL_DONE) {
+      throw new BadRequestException(
+        'Only confirmed (DEAL_DONE) lots can be added to the yard',
+      );
+    }
+
+    const zone = await this.yardZoneRepository.findById(zoneId);
+    if (!zone || zone.organizationId?.toString() !== orgId) {
+      throw new BadRequestException('Invalid yard zone');
+    }
+
+    const lotVehicles = await this.auctionVehicleRepository.findByLot(
+      orgId,
+      lotId,
+    );
+    if (!lotVehicles.length) {
+      throw new BadRequestException('No vehicles found on this lot');
+    }
+
+    const requestedIds = Array.isArray(sanitized.auctionVehicleIds)
+      ? sanitized.auctionVehicleIds.map((id) =>
+          validateObjectId(id, 'Auction vehicle ID'),
+        )
+      : [];
+
+    let targets = lotVehicles;
+    if (requestedIds.length > 0) {
+      const allowed = new Set(lotVehicles.map((v) => v._id.toString()));
+      const invalid = requestedIds.filter((id) => !allowed.has(id));
+      if (invalid.length) {
+        throw new BadRequestException(
+          'One or more vehicles do not belong to this lot',
+        );
+      }
+      const want = new Set(requestedIds);
+      targets = lotVehicles.filter((v) => want.has(v._id.toString()));
+    }
+
+    const existingYard =
+      await this.yardVehicleRepository.findByAuctionVehicleIds(
+        orgId,
+        targets.map((v) => v._id.toString()),
+      );
+    const alreadySet = new Set(
+      existingYard
+        .map((y) => y.auctionVehicleId?.toString())
+        .filter(Boolean) as string[],
+    );
+
+    const toZoneId = new Types.ObjectId(zoneId);
+    const now = new Date();
+    const created: unknown[] = [];
+    let skipped = 0;
+
+    for (const vehicle of targets) {
+      const auctionVehicleId = vehicle._id.toString();
+      if (alreadySet.has(auctionVehicleId)) {
+        skipped += 1;
+        continue;
+      }
+
+      const registrationNumber = (
+        vehicle.registrationNumber ||
+        vehicle.vehicleNumber ||
+        ''
+      ).trim();
+      if (!registrationNumber) {
+        throw new BadRequestException(
+          `Vehicle ${auctionVehicleId} is missing a registration / vehicle number`,
+        );
+      }
+
+      const yardRow = await this.yardVehicleRepository.create({
+        organizationId: new Types.ObjectId(orgId),
+        registrationNumber,
+        make: vehicle.make,
+        modelName: vehicle.vehicleModel,
+        auctionId: vehicle.auctionId,
+        lotId: vehicle.lotId,
+        auctionVehicleId: vehicle._id,
+        sourceType: YardSourceType.AUCTION,
+        currentStatus: YardVehicleStatus.PARKED,
+        currentZoneId: toZoneId,
+        currentSlot: sanitized.slot?.trim() || undefined,
+        parkedAt: now,
+        grossWeightKg: sanitized.grossWeightKg,
+        remarks: sanitized.notes?.trim() || undefined,
+        createdBy: userId,
+        updatedBy: userId,
+      });
+
+      await this.recordMovement({
+        orgId,
+        yardVehicleId: yardRow._id,
+        fromStatus: undefined,
+        toStatus: YardVehicleStatus.PARKED,
+        toZoneId,
+        toSlot: sanitized.slot,
+        notes: sanitized.notes,
+        source: 'AUCTION_MANUAL_PARK',
+        performedBy: userId,
+      });
+
+      await this.logAudit(
+        authenticatedUser,
+        AuditAction.YARD_STATUS_UPDATE,
+        yardRow._id.toString(),
+        {
+          fromStatus: null,
+          toStatus: YardVehicleStatus.PARKED,
+          source: 'AUCTION_MANUAL_PARK',
+          lotId,
+          auctionVehicleId,
+        },
+      );
+
+      created.push(yardRow);
+    }
+
+    return {
+      message: `Parked ${created.length} vehicle(s)${skipped ? `, skipped ${skipped} already in yard` : ''}`,
+      created: created.length,
+      skipped,
+      vehicles: created,
+    };
   }
 }

@@ -25,6 +25,7 @@ import type { AuthenticatedUser } from 'src/common/interface/authenticated-user.
 import { QueryYardVehicleDto } from './dto/query-yard-vehicle.dto';
 import { UpdateYardVehicleStatusDto } from './dto/update-yard-vehicle-status.dto';
 import { CreateYardZoneDto } from './dto/create-yard-zone.dto';
+import { AddFromAuctionDto } from './dto/add-from-auction.dto';
 
 @ApiTags('Yard')
 @ApiBearerAuth()
@@ -32,6 +33,28 @@ import { CreateYardZoneDto } from './dto/create-yard-zone.dto';
 @UseGuards(jwtAuthGuard, RolesGuard)
 export class YardController {
   constructor(private readonly yardService: YardService) {}
+
+  @Get('eligible-auction-lots')
+  @Roles(Role.ADMIN, Role.STAFF)
+  @ApiOperation({
+    summary: 'List DEAL_DONE auction lots with vehicles for yard intake',
+  })
+  getEligibleAuctionLots(@GetUser() user: AuthenticatedUser) {
+    return this.yardService.getEligibleAuctionLots(user);
+  }
+
+  @Post('from-auction')
+  @Roles(Role.ADMIN, Role.STAFF)
+  @ApiOperation({
+    summary: 'Park auction vehicles from a DEAL_DONE lot into the yard',
+  })
+  @ApiResponse({ status: 201, description: 'Vehicles parked in yard' })
+  addFromAuction(
+    @Body() dto: AddFromAuctionDto,
+    @GetUser() user: AuthenticatedUser,
+  ) {
+    return this.yardService.addFromAuction(dto, user);
+  }
 
   @Get('vehicles')
   @Roles(Role.ADMIN, Role.STAFF)

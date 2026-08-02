@@ -19,6 +19,23 @@ export class YardVehicleRepository extends BaseRepository<YardVehicleDocument> {
     });
   }
 
+  findByAuctionVehicleId(organizationId: string, auctionVehicleId: string) {
+    return this.model.findOne({
+      organizationId: new Types.ObjectId(organizationId),
+      auctionVehicleId: new Types.ObjectId(auctionVehicleId),
+    });
+  }
+
+  findByAuctionVehicleIds(organizationId: string, auctionVehicleIds: string[]) {
+    if (!auctionVehicleIds.length) return Promise.resolve([]);
+    return this.model.find({
+      organizationId: new Types.ObjectId(organizationId),
+      auctionVehicleId: {
+        $in: auctionVehicleIds.map((id) => new Types.ObjectId(id)),
+      },
+    });
+  }
+
   countByStatus(organizationId: string, status: string) {
     return this.model.countDocuments({
       organizationId: new Types.ObjectId(organizationId),
