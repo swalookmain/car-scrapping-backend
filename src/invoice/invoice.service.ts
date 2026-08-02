@@ -2,6 +2,7 @@ import {
   BadRequestException,
   Inject,
   Injectable,
+  InternalServerErrorException,
   NotFoundException,
   forwardRef,
 } from '@nestjs/common';
@@ -936,6 +937,9 @@ export class InvoiceService {
         ) {
           throw error;
         }
+        if (error instanceof InternalServerErrorException) {
+          throw error;
+        }
         const errorMessage =
           error instanceof Error ? error.message : 'Unknown error';
         this.logger.error(
@@ -943,8 +947,11 @@ export class InvoiceService {
           error instanceof Error ? error.stack : undefined,
           'InvoiceService',
         );
+        const isProd = process.env.NODE_ENV === 'production';
         throw new BadRequestException(
-          'Failed to upload purchase documents. Please try again.',
+          isProd
+            ? 'Failed to upload purchase documents. Please try again.'
+            : `Failed to upload purchase documents: ${errorMessage}`,
         );
       }
     }

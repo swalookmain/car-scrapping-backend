@@ -119,12 +119,15 @@ export class InventoryAuditService {
       .find({
         organizationId: orgOid,
         dismantledAt: { $gte: from, $lte: to },
+        vehicleInvoiceId: { $exists: true, $ne: null },
       })
       .select('vehicleInvoiceId dismantledAt currentStatus')
       .lean();
 
     const dismantledVehicleIds = new Set(
-      yardInRange.map((y) => y.vehicleInvoiceId.toString()),
+      yardInRange
+        .map((y) => y.vehicleInvoiceId?.toString())
+        .filter((id): id is string => Boolean(id)),
     );
 
     const inventoryAgg = await this.inventoryModel.aggregate([
@@ -180,7 +183,9 @@ export class InventoryAuditService {
       : [];
 
     const yardByVehicle = new Map(
-      yardInRange.map((y) => [y.vehicleInvoiceId.toString(), y]),
+      yardInRange
+        .filter((y) => Boolean(y.vehicleInvoiceId))
+        .map((y) => [y.vehicleInvoiceId!.toString(), y]),
     );
 
     const includedVehicles = vehicles.filter((v) => {

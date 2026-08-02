@@ -10,6 +10,7 @@ import { YardVehicleRepository } from './yard-vehicle.repository';
 import { YardMovementRepository } from './yard-movement.repository';
 import { InvoiceModule } from 'src/invoice/invoice.module';
 import { AuditLogModule } from 'src/audit-log/audit-log.module';
+import { AuctionModule } from 'src/auction/auction.module';
 
 @Module({
   imports: [
@@ -19,6 +20,7 @@ import { AuditLogModule } from 'src/audit-log/audit-log.module';
       { name: YardMovement.name, schema: YardMovementSchema },
     ]),
     forwardRef(() => InvoiceModule),
+    forwardRef(() => AuctionModule),
     AuditLogModule,
   ],
   controllers: [YardController],
