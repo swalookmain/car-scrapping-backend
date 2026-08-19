@@ -1,31 +1,29 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { Type } from 'class-transformer';
-import { IsDateString, IsNumber, IsOptional, IsString, Min } from 'class-validator';
+import { IsNumber, IsOptional, IsString, MaxLength, Min } from 'class-validator';
 
-export class CreateLotPaymentDto {
-  @ApiProperty()
+export class AddLotPenaltyDto {
+  @ApiProperty({ description: 'Penalty amount to add to the lot final due' })
   @Type(() => Number)
   @IsNumber({ maxDecimalPlaces: 2 })
   @Min(0.01)
-  amountPaid: number;
+  amount: number;
 
   @ApiPropertyOptional()
   @IsOptional()
   @IsString()
+  @MaxLength(100)
   transactionNumber?: string;
 
   @ApiPropertyOptional()
   @IsOptional()
   @IsString()
+  @MaxLength(100)
   bank?: string;
 
   @ApiPropertyOptional()
   @IsOptional()
-  @IsDateString()
-  transferDate?: string;
-
-  @ApiPropertyOptional()
-  @IsOptional()
   @IsString()
+  @MaxLength(500)
   remark?: string;
 }

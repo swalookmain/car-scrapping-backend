@@ -30,11 +30,19 @@ export class LifecycleStateService {
     return Math.max(0, Math.round(balance * 100) / 100);
   }
 
+  /** Deal balance + optional penalty = amount the buyer must clear */
+  computeAmountDue(balanceAmount: number, penaltyAmount = 0): number {
+    return Math.max(
+      0,
+      Math.round((balanceAmount + (penaltyAmount || 0)) * 100) / 100,
+    );
+  }
+
   computePaymentStatus(
-    balanceAmount: number,
+    amountDue: number,
     amountPaidTotal: number,
   ): { paymentStatus: LotPaymentStatus; amountLeft: number } {
-    const amountLeft = Math.max(0, Math.round((balanceAmount - amountPaidTotal) * 100) / 100);
+    const amountLeft = Math.max(0, Math.round((amountDue - amountPaidTotal) * 100) / 100);
     let paymentStatus = LotPaymentStatus.NOT_PAID;
     if (amountLeft === 0 && amountPaidTotal > 0) {
       paymentStatus = LotPaymentStatus.PAID;

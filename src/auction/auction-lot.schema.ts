@@ -47,6 +47,10 @@ export class LotPaymentSnapshot {
 
   @Prop({ type: Number, default: 0 })
   amountLeft: number;
+
+  /** Extra charges already paid (e.g. late fee); included in total due and paid, not left */
+  @Prop({ type: Number, default: 0, min: 0 })
+  penaltyAmount?: number;
 }
 
 @Schema({ _id: false, timestamps: false })

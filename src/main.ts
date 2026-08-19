@@ -27,6 +27,8 @@ async function bootstrap() {
         },
       },
       crossOriginEmbedderPolicy: false,
+      // SPA (e.g. :5173) calling API (:5000) must be allowed to read responses
+      crossOriginResourcePolicy: { policy: 'cross-origin' },
     }),
   );
 
@@ -45,10 +47,10 @@ async function bootstrap() {
 
 
 
-  // Security: Rate limiting
+  // Security: Rate limiting (SPA pages fire many GETs; keep headroom for actions)
   const limiter = rateLimit({
     windowMs: 15 * 60 * 1000, // 15 minutes
-    max: 100, // limit each IP to 100 requests per windowMs
+    max: 1000,
     message: 'Too many requests from this IP, please try again later.',
     standardHeaders: true,
     legacyHeaders: false,

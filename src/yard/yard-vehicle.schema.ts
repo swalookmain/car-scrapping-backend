@@ -80,9 +80,16 @@ export class YardVehicle extends Document {
 
 export type YardVehicleDocument = YardVehicle & Document;
 export const YardVehicleSchema = SchemaFactory.createForClass(YardVehicle);
+/** Unique only when a purchase vehicle-invoice is linked; auction intake omits this field */
 YardVehicleSchema.index(
   { vehicleInvoiceId: 1 },
-  { unique: true, sparse: true },
+  {
+    unique: true,
+    name: 'vehicleInvoiceId_partial_unique',
+    partialFilterExpression: {
+      vehicleInvoiceId: { $exists: true, $type: 'objectId' },
+    },
+  },
 );
 YardVehicleSchema.index(
   { organizationId: 1, auctionVehicleId: 1 },
