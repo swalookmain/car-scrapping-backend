@@ -317,7 +317,11 @@ export class AuctionService implements OnModuleInit {
       this.auctionLotRepository.findByAuction(orgId, auctionId),
       this.auctionVehicleRepository.findByAuction(orgId, auctionId),
     ]);
-    return { ...auction.toObject(), lots, vehicles };
+    return {
+      ...auction.toObject(),
+      lots: lots.map((lot) => lot.toObject()),
+      vehicles: vehicles.map((vehicle) => vehicle.toObject()),
+    };
   }
 
   async updateAuction(

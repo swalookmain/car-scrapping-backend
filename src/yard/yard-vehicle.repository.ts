@@ -13,6 +13,55 @@ export class YardVehicleRepository extends BaseRepository<YardVehicleDocument> {
     super(yardVehicleModel);
   }
 
+  /**
+   * Migrates legacy unique/sparse vehicleInvoiceId indexes that treat null as a
+   * value (only one auction-parked row allowed). Partial unique allows many
+   * pre-invoice yard rows.
+   */
+  async ensureVehicleInvoicePartialUniqueIndex(): Promise<string[]> {
+    const changed: string[] = [];
+
+    const unsetResult = await this.model.updateMany(
+      { vehicleInvoiceId: null },
+      { $unset: { vehicleInvoiceId: '' } },
+    );
+    if (unsetResult.modifiedCount > 0) {
+      changed.push(`unset-null:${unsetResult.modifiedCount}`);
+    }
+
+    const indexes = await this.model.collection.indexes();
+    const desiredName = 'vehicleInvoiceId_partial_unique';
+
+    for (const index of indexes) {
+      const key = index.key as Record<string, number> | undefined;
+      if (!key || key.vehicleInvoiceId !== 1) continue;
+      if (Object.keys(key).length !== 1) continue;
+      if (index.name === desiredName) continue;
+      if (index.name) {
+        await this.model.collection.dropIndex(index.name);
+        changed.push(`dropped:${index.name}`);
+      }
+    }
+
+    const remaining = await this.model.collection.indexes();
+    const hasDesired = remaining.some((index) => index.name === desiredName);
+    if (!hasDesired) {
+      await this.model.collection.createIndex(
+        { vehicleInvoiceId: 1 },
+        {
+          unique: true,
+          name: desiredName,
+          partialFilterExpression: {
+            vehicleInvoiceId: { $exists: true, $type: 'objectId' },
+          },
+        },
+      );
+      changed.push(`created:${desiredName}`);
+    }
+
+    return changed;
+  }
+
   findByVehicleInvoiceId(vehicleInvoiceId: string) {
     return this.model.findOne({
       vehicleInvoiceId: new Types.ObjectId(vehicleInvoiceId),

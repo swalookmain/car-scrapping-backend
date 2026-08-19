@@ -22,10 +22,12 @@ import { CreateLotPaymentDto } from './dto/create-lot-payment.dto';
 import { UpdateAcceptanceLetterDto } from './dto/update-acceptance-letter.dto';
 import { UpdateLotDeliveryDto } from './dto/update-lot-delivery.dto';
 import { UpdateLotRcmDto } from './dto/update-lot-rcm.dto';
+import { AddLotPenaltyDto } from './dto/add-lot-penalty.dto';
 import { LifecycleStateService } from './lifecycle-state.service';
 import { LotPaymentRecordRepository } from './repositories/lot-payment-record.repository';
 import { LotLifecycleEventRepository } from './repositories/lot-lifecycle-event.repository';
 import { LotDocumentRepository } from './repositories/lot-document.repository';
+import { LotPaymentRecordType } from './schemas/lot-payment-record.schema';
 
 @Injectable()
 export class LifecycleService {
@@ -142,7 +144,10 @@ export class LifecycleService {
           gatePassDocumentUrl = doc?.url;
         }
         const locked = !this.lifecycleStateService.isLotOutcomeEditable(lot.outcomeStatus);
-        return this.mapLotForResponse(lot, payments, gatePassDocumentUrl, locked);
+        const paymentRows = payments.map((payment) =>
+          typeof payment.toObject === 'function' ? payment.toObject() : payment,
+        );
+        return this.mapLotForResponse(lot, paymentRows, gatePassDocumentUrl, locked);
       }),
     );
 
@@ -232,6 +237,7 @@ export class LifecycleService {
           paymentStatus: LotPaymentStatus.NOT_PAID,
           amountPaidTotal: 0,
           amountLeft: balanceAmount,
+          penaltyAmount: 0,
         };
 
         const phone = this.resolveRecipientPhone(auction);
@@ -280,10 +286,15 @@ export class LifecycleService {
       throw new BadRequestException('Payments can only be recorded for deal-done lots');
     }
     const balanceAmount = lot.deal?.balanceAmount ?? 0;
+    const penaltyAmount = lot.payment?.penaltyAmount ?? 0;
+    const amountDue = this.lifecycleStateService.computeAmountDue(
+      balanceAmount,
+      penaltyAmount,
+    );
     const currentPaid = lot.payment?.amountPaidTotal ?? 0;
     const sanitized = sanitizeObject(dto) as CreateLotPaymentDto;
 
-    if (currentPaid + sanitized.amountPaid > balanceAmount) {
+    if (currentPaid + sanitized.amountPaid > amountDue) {
       throw new BadRequestException('Payment exceeds outstanding balance');
     }
 
@@ -291,6 +302,7 @@ export class LifecycleService {
       organizationId: new Types.ObjectId(orgId),
       auctionId: lot.auctionId,
       lotId: new Types.ObjectId(validatedLotId),
+      recordType: LotPaymentRecordType.PAYMENT,
       amountPaid: sanitized.amountPaid,
       transactionNumber: sanitized.transactionNumber,
       bank: sanitized.bank,
@@ -301,7 +313,7 @@ export class LifecycleService {
 
     const newPaidTotal = currentPaid + sanitized.amountPaid;
     const { paymentStatus, amountLeft } = this.lifecycleStateService.computePaymentStatus(
-      balanceAmount,
+      amountDue,
       newPaidTotal,
     );
 
@@ -310,6 +322,7 @@ export class LifecycleService {
         paymentStatus,
         amountPaidTotal: newPaidTotal,
         amountLeft,
+        penaltyAmount,
       },
       updatedBy: new Types.ObjectId(user.userId),
     });
@@ -324,7 +337,77 @@ export class LifecycleService {
       validatedLotId,
       LotLifecycleEventType.PAYMENT_RECORDED,
       user.userId,
-      { amountPaid: sanitized.amountPaid, amountLeft },
+      { amountPaid: sanitized.amountPaid, amountLeft, penaltyAmount },
+    );
+
+    return this.getLifecycle(lot.auctionId.toString(), user);
+  }
+
+  async addPenalty(
+    lotId: string,
+    dto: AddLotPenaltyDto,
+    user: AuthenticatedUser,
+  ) {
+    const orgId = this.getOrgId(user);
+    const validatedLotId = validateObjectId(lotId, 'Lot ID');
+    const lot = await this.getLotOrThrow(orgId, validatedLotId);
+
+    if (lot.outcomeStatus !== LotOutcomeStatus.DEAL_DONE) {
+      throw new BadRequestException('Penalty can only be added for deal-done lots');
+    }
+
+    const sanitized = sanitizeObject(dto) as AddLotPenaltyDto;
+    const balanceAmount = lot.deal?.balanceAmount ?? 0;
+    const currentPenalty = lot.payment?.penaltyAmount ?? 0;
+    const paidTotal = lot.payment?.amountPaidTotal ?? 0;
+    // Penalty is already paid: raise final due and paid by the same amount → left unchanged
+    const penaltyAmount =
+      Math.round((currentPenalty + sanitized.amount) * 100) / 100;
+    const newPaidTotal = Math.round((paidTotal + sanitized.amount) * 100) / 100;
+    const amountDue = this.lifecycleStateService.computeAmountDue(
+      balanceAmount,
+      penaltyAmount,
+    );
+    const { paymentStatus, amountLeft } =
+      this.lifecycleStateService.computePaymentStatus(amountDue, newPaidTotal);
+
+    await this.lotPaymentRecordRepository.create({
+      organizationId: new Types.ObjectId(orgId),
+      auctionId: lot.auctionId,
+      lotId: new Types.ObjectId(validatedLotId),
+      recordType: LotPaymentRecordType.PENALTY,
+      amountPaid: sanitized.amount,
+      transactionNumber: sanitized.transactionNumber,
+      bank: sanitized.bank,
+      remark: sanitized.remark,
+      recordedBy: new Types.ObjectId(user.userId),
+    });
+
+    await this.auctionLotRepository.updateById(validatedLotId, {
+      payment: {
+        paymentStatus,
+        amountPaidTotal: newPaidTotal,
+        amountLeft,
+        penaltyAmount,
+      },
+      updatedBy: new Types.ObjectId(user.userId),
+    });
+
+    await this.recordEvent(
+      orgId,
+      lot.auctionId.toString(),
+      validatedLotId,
+      LotLifecycleEventType.PENALTY_ADDED,
+      user.userId,
+      {
+        amountAdded: sanitized.amount,
+        penaltyAmount,
+        amountPaidTotal: newPaidTotal,
+        amountLeft,
+        transactionNumber: sanitized.transactionNumber,
+        bank: sanitized.bank,
+        remark: sanitized.remark,
+      },
     );
 
     return this.getLifecycle(lot.auctionId.toString(), user);
@@ -523,6 +606,32 @@ export class LifecycleService {
     return this.getLifecycle(lot.auctionId.toString(), user);
   }
 
+  async deleteGatePassFile(lotId: string, user: AuthenticatedUser) {
+    const orgId = this.getOrgId(user);
+    const validatedLotId = validateObjectId(lotId, 'Lot ID');
+    const lot = await this.getLotOrThrow(orgId, validatedLotId);
+
+    const documentId = lot.gatePass?.documentId;
+    if (!documentId) {
+      throw new BadRequestException('No gate pass file to delete');
+    }
+
+    const doc = await this.lotDocumentRepository.findById(documentId.toString());
+    if (doc?.storageKey) {
+      await this.storageService.deleteFile(doc.storageKey);
+    }
+    if (doc) {
+      await this.lotDocumentRepository.deleteById(doc._id.toString());
+    }
+
+    await this.auctionLotRepository.updateById(validatedLotId, {
+      'gatePass.documentId': null,
+      updatedBy: new Types.ObjectId(user.userId),
+    } as any);
+
+    return this.getLifecycle(lot.auctionId.toString(), user);
+  }
+
   async updateRcm(lotId: string, dto: UpdateLotRcmDto, user: AuthenticatedUser) {
     const orgId = this.getOrgId(user);
     const validatedLotId = validateObjectId(lotId, 'Lot ID');
@@ -533,13 +642,35 @@ export class LifecycleService {
     }
 
     const sanitized = sanitizeObject(dto) as UpdateLotRcmDto;
-    const rcm = {
-      challanNumber: sanitized.challanNumber,
-      transactionDate: sanitized.transactionDate
-        ? new Date(sanitized.transactionDate)
-        : undefined,
-      amount: sanitized.amount,
-    };
+    const transactionDate = sanitized.transactionDate
+      ? new Date(`${sanitized.transactionDate}T00:00:00.000Z`)
+      : undefined;
+    if (transactionDate && Number.isNaN(transactionDate.getTime())) {
+      throw new BadRequestException('Invalid transaction date');
+    }
+
+    const rcm: {
+      challanNumber?: string;
+      transactionDate?: Date;
+      amount?: number;
+    } = {};
+    if (sanitized.challanNumber !== undefined) {
+      rcm.challanNumber = sanitized.challanNumber;
+    }
+    if (transactionDate) {
+      rcm.transactionDate = transactionDate;
+    }
+    if (sanitized.amount !== undefined) {
+      rcm.amount = sanitized.amount;
+    }
+
+    if (
+      rcm.challanNumber === undefined &&
+      rcm.transactionDate === undefined &&
+      rcm.amount === undefined
+    ) {
+      throw new BadRequestException('Provide at least one RCM field to save');
+    }
 
     await this.auctionLotRepository.updateById(validatedLotId, {
       rcm,
@@ -552,7 +683,11 @@ export class LifecycleService {
       validatedLotId,
       LotLifecycleEventType.RCM_UPDATED,
       user.userId,
-      rcm as unknown as Record<string, unknown>,
+      {
+        challanNumber: rcm.challanNumber,
+        transactionDate: sanitized.transactionDate,
+        amount: rcm.amount,
+      },
     );
 
     return this.getLifecycle(lot.auctionId.toString(), user);

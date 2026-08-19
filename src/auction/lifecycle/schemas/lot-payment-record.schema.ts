@@ -1,6 +1,11 @@
 import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
 import { Document, Types } from 'mongoose';
 
+export enum LotPaymentRecordType {
+  PAYMENT = 'PAYMENT',
+  PENALTY = 'PENALTY',
+}
+
 @Schema({ timestamps: { createdAt: true, updatedAt: false }, collection: 'lot_payment_records' })
 export class LotPaymentRecord extends Document {
   @Prop({ type: Types.ObjectId, ref: 'organizations', required: true })
@@ -11,6 +16,12 @@ export class LotPaymentRecord extends Document {
 
   @Prop({ type: Types.ObjectId, ref: 'AuctionLot', required: true })
   lotId: Types.ObjectId;
+
+  @Prop({
+    enum: LotPaymentRecordType,
+    default: LotPaymentRecordType.PAYMENT,
+  })
+  recordType: LotPaymentRecordType;
 
   @Prop({ type: Number, required: true, min: 0 })
   amountPaid: number;

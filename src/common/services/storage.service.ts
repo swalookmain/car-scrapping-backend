@@ -7,7 +7,7 @@ import {
 import { ConfigService } from '@nestjs/config';
 import { v2 as cloudinary } from 'cloudinary';
 import { Readable } from 'stream';
-import { S3Client, PutObjectCommand } from '@aws-sdk/client-s3';
+import { S3Client, PutObjectCommand, DeleteObjectCommand } from '@aws-sdk/client-s3';
 import type { StorageProviderType } from 'src/config/storage.config';
 
 export interface UploadFile {
@@ -107,6 +107,39 @@ export class StorageService implements OnModuleInit {
       return this.uploadToCloudinary(file, prefix);
     }
     return this.uploadToS3(file, prefix);
+  }
+
+  async deleteFile(storageKey: string): Promise<void> {
+    if (!storageKey) return;
+    if (!this.isReady()) {
+      this.logger.warn('deleteFile called but storage not configured — skipping');
+      return;
+    }
+
+    try {
+      if (this.provider === 'cloudinary') {
+        await this.deleteFromCloudinary(storageKey);
+      } else {
+        await this.deleteFromS3(storageKey);
+      }
+    } catch (error) {
+      const message =
+        error instanceof Error ? error.message : 'Unknown delete error';
+      this.logger.error(`Failed to delete ${storageKey}: ${message}`);
+    }
+  }
+
+  private async deleteFromCloudinary(publicId: string): Promise<void> {
+    const uploader = cloudinary.uploader as any;
+    await uploader.destroy(publicId, { invalidate: true });
+    await uploader.destroy(publicId, { resource_type: 'raw', invalidate: true });
+  }
+
+  private async deleteFromS3(key: string): Promise<void> {
+    if (!this.s3Client || !this.s3Bucket) return;
+    await this.s3Client.send(
+      new DeleteObjectCommand({ Bucket: this.s3Bucket, Key: key }),
+    );
   }
 
   private sanitizePrefix(prefix: string): string {

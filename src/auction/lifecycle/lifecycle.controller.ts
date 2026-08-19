@@ -1,6 +1,7 @@
 import {
   Body,
   Controller,
+  Delete,
   Get,
   Param,
   Patch,
@@ -26,6 +27,7 @@ import { CreateLotPaymentDto } from './dto/create-lot-payment.dto';
 import { UpdateAcceptanceLetterDto } from './dto/update-acceptance-letter.dto';
 import { UpdateLotDeliveryDto } from './dto/update-lot-delivery.dto';
 import { UpdateLotRcmDto } from './dto/update-lot-rcm.dto';
+import { AddLotPenaltyDto } from './dto/add-lot-penalty.dto';
 
 const uploadStorage = memoryStorage();
 
@@ -63,6 +65,16 @@ export class LifecycleController {
     @GetUser() user: AuthenticatedUser,
   ) {
     return this.lifecycleService.recordPayment(lotId, dto, user);
+  }
+
+  @Post('lots/:lotId/penalty')
+  @Roles(Role.ADMIN, Role.STAFF)
+  addPenalty(
+    @Param('lotId') lotId: string,
+    @Body() dto: AddLotPenaltyDto,
+    @GetUser() user: AuthenticatedUser,
+  ) {
+    return this.lifecycleService.addPenalty(lotId, dto, user);
   }
 
   @Patch('lots/:lotId/acceptance-letter')
@@ -111,6 +123,15 @@ export class LifecycleController {
     @GetUser() user: AuthenticatedUser,
   ) {
     return this.lifecycleService.uploadGatePass(lotId, gatePassDate, file as Express.Multer.File, user);
+  }
+
+  @Delete('lots/:lotId/gate-pass-file')
+  @Roles(Role.ADMIN, Role.STAFF)
+  deleteGatePassFile(
+    @Param('lotId') lotId: string,
+    @GetUser() user: AuthenticatedUser,
+  ) {
+    return this.lifecycleService.deleteGatePassFile(lotId, user);
   }
 
   @Patch('lots/:lotId/rcm')

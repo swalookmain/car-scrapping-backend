@@ -2,7 +2,9 @@ import {
   BadRequestException,
   Inject,
   Injectable,
+  Logger,
   NotFoundException,
+  OnModuleInit,
 } from '@nestjs/common';
 import { WINSTON_MODULE_NEST_PROVIDER } from 'nest-winston';
 import type { LoggerService } from '@nestjs/common';
@@ -37,7 +39,9 @@ const DEFAULT_ZONES = [
 ];
 
 @Injectable()
-export class YardService {
+export class YardService implements OnModuleInit {
+  private readonly bootstrapLogger = new Logger(YardService.name);
+
   constructor(
     private readonly yardVehicleRepository: YardVehicleRepository,
     private readonly yardMovementRepository: YardMovementRepository,
@@ -51,6 +55,24 @@ export class YardService {
     @Inject(WINSTON_MODULE_NEST_PROVIDER)
     private readonly logger: LoggerService,
   ) {}
+
+  async onModuleInit() {
+    try {
+      const changed =
+        await this.yardVehicleRepository.ensureVehicleInvoicePartialUniqueIndex();
+      if (changed.length > 0) {
+        this.bootstrapLogger.warn(
+          `Yard vehicleInvoiceId index migration: ${changed.join(', ')}`,
+        );
+      }
+    } catch (error) {
+      const message =
+        error instanceof Error ? error.message : 'Unknown yard index migration error';
+      this.bootstrapLogger.error(
+        `Failed to migrate yard vehicleInvoiceId index: ${message}`,
+      );
+    }
+  }
 
   private getOrgId(user: AuthenticatedUser): string {
     if (!user.orgId) {
@@ -842,51 +864,65 @@ export class YardService {
         );
       }
 
-      const yardRow = await this.yardVehicleRepository.create({
-        organizationId: new Types.ObjectId(orgId),
-        registrationNumber,
-        make: vehicle.make,
-        modelName: vehicle.vehicleModel,
-        auctionId: vehicle.auctionId,
-        lotId: vehicle.lotId,
-        auctionVehicleId: vehicle._id,
-        sourceType: YardSourceType.AUCTION,
-        currentStatus: YardVehicleStatus.PARKED,
-        currentZoneId: toZoneId,
-        currentSlot: sanitized.slot?.trim() || undefined,
-        parkedAt: now,
-        grossWeightKg: sanitized.grossWeightKg,
-        remarks: sanitized.notes?.trim() || undefined,
-        createdBy: userId,
-        updatedBy: userId,
-      });
+      try {
+        const yardRow = await this.yardVehicleRepository.create({
+          organizationId: new Types.ObjectId(orgId),
+          registrationNumber,
+          make: vehicle.make,
+          modelName: vehicle.vehicleModel,
+          auctionId: vehicle.auctionId,
+          lotId: vehicle.lotId,
+          auctionVehicleId: vehicle._id,
+          sourceType: YardSourceType.AUCTION,
+          currentStatus: YardVehicleStatus.PARKED,
+          currentZoneId: toZoneId,
+          currentSlot: sanitized.slot?.trim() || undefined,
+          parkedAt: now,
+          grossWeightKg: sanitized.grossWeightKg,
+          remarks: sanitized.notes?.trim() || undefined,
+          createdBy: userId,
+          updatedBy: userId,
+        });
 
-      await this.recordMovement({
-        orgId,
-        yardVehicleId: yardRow._id,
-        fromStatus: undefined,
-        toStatus: YardVehicleStatus.PARKED,
-        toZoneId,
-        toSlot: sanitized.slot,
-        notes: sanitized.notes,
-        source: 'AUCTION_MANUAL_PARK',
-        performedBy: userId,
-      });
-
-      await this.logAudit(
-        authenticatedUser,
-        AuditAction.YARD_STATUS_UPDATE,
-        yardRow._id.toString(),
-        {
-          fromStatus: null,
+        await this.recordMovement({
+          orgId,
+          yardVehicleId: yardRow._id,
+          fromStatus: undefined,
           toStatus: YardVehicleStatus.PARKED,
+          toZoneId,
+          toSlot: sanitized.slot,
+          notes: sanitized.notes,
           source: 'AUCTION_MANUAL_PARK',
-          lotId,
-          auctionVehicleId,
-        },
-      );
+          performedBy: userId,
+        });
 
-      created.push(yardRow);
+        await this.logAudit(
+          authenticatedUser,
+          AuditAction.YARD_STATUS_UPDATE,
+          yardRow._id.toString(),
+          {
+            fromStatus: null,
+            toStatus: YardVehicleStatus.PARKED,
+            source: 'AUCTION_MANUAL_PARK',
+            lotId,
+            auctionVehicleId,
+          },
+        );
+
+        created.push(yardRow);
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        if (message.includes('E11000') && message.includes('auctionVehicleId')) {
+          skipped += 1;
+          continue;
+        }
+        if (message.includes('E11000') && message.includes('vehicleInvoiceId')) {
+          throw new BadRequestException(
+            'Yard index still blocks auction parking without invoice. Restart the API so index migration can run, then retry.',
+          );
+        }
+        throw error;
+      }
     }
 
     return {
