@@ -49,21 +49,30 @@ async function bootstrap() {
 
   // Security: Rate limiting (SPA pages fire many GETs; keep headroom for actions)
   const limiter = rateLimit({
-    windowMs: 15 * 60 * 1000, // 15 minutes
-    max: 1000,
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  max: 5000,                // 5000 requests per IP per 15 minutes
+  message: {
+    statusCode: 429,
     message: 'Too many requests from this IP, please try again later.',
-    standardHeaders: true,
-    legacyHeaders: false,
-  });
-  app.use(limiter);
+  },
+  standardHeaders: true,
+  legacyHeaders: false,
+});
 
-  // Stricter rate limiting for auth endpoints
-  const authLimiter = rateLimit({
-    windowMs: 15 * 60 * 1000, // 15 minutes
-    max: 5, // limit each IP to 5 login requests per windowMs
+app.use(limiter);
+
+// Stricter rate limiting for authentication endpoints
+const authLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  max: 5,                   // 5 failed login/refresh attempts per IP
+  message: {
+    statusCode: 429,
     message: 'Too many login attempts, please try again later.',
-    skipSuccessfulRequests: true,
-  });
+  },
+  standardHeaders: true,
+  legacyHeaders: false,
+  skipSuccessfulRequests: true,
+});
   app.use('/auth/login', authLimiter);
   app.use('/auth/refresh', authLimiter);
 
