@@ -19,9 +19,7 @@ import {
   ApiTags,
 } from '@nestjs/swagger';
 import { FileFieldsInterceptor } from '@nestjs/platform-express';
-import { memoryStorage } from 'multer';
 import type { Express } from 'express';
-import type { MulterOptions } from '@nestjs/platform-express/multer/interfaces/multer-options.interface';
 import { jwtAuthGuard } from 'src/common/guards/jwt-auth.guard';
 import { RolesGuard } from 'src/common/guards/roles.guard';
 import { Roles } from 'src/common/decorators/roles.decorators';
@@ -36,10 +34,9 @@ import { LeadLookupQueryDto } from './dto/lead-lookup-query.dto';
 import { GetUser } from 'src/common/decorators/user.decorator';
 import type { AuthenticatedUser } from 'src/common/interface/authenticated-user.interface';
 import { UploadLeadDocumentDto } from './dto/upload-lead-document.dto';
-import { DOCUMENT_FILE_FILTER } from 'src/common/utils/document-upload.util';
+import { DOCUMENT_UPLOAD_OPTIONS } from 'src/common/utils/document-upload.util';
 
-// eslint-disable-next-line @typescript-eslint/no-unsafe-call, @typescript-eslint/no-unsafe-assignment
-const uploadStorage = memoryStorage();
+
 
 @ApiTags('Leads')
 @ApiBearerAuth()
@@ -140,11 +137,7 @@ export class LeadController {
         { name: 'vehicleBack', maxCount: 1 },
         { name: 'vehicleInterior', maxCount: 1 },
       ],
-      {
-        // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
-        storage: uploadStorage as MulterOptions['storage'],
-        fileFilter: DOCUMENT_FILE_FILTER,
-      },
+      DOCUMENT_UPLOAD_OPTIONS,
     ),
   )
   uploadLeadDocuments(

@@ -35,13 +35,10 @@ import { UploadPurchaseDocumentDto } from './dto/upload-purchase-document.dto';
 import { QueryPurchaseDocumentDto } from './dto/query-purchase-document.dto';
 import { FileFieldsInterceptor } from '@nestjs/platform-express';
 import { UploadedFiles, UseInterceptors } from '@nestjs/common';
-import { memoryStorage } from 'multer';
 import type { Express } from 'express';
-import type { MulterOptions } from '@nestjs/platform-express/multer/interfaces/multer-options.interface';
-import { DOCUMENT_FILE_FILTER } from 'src/common/utils/document-upload.util';
+import { DOCUMENT_UPLOAD_OPTIONS } from 'src/common/utils/document-upload.util';
 
-// eslint-disable-next-line @typescript-eslint/no-unsafe-call, @typescript-eslint/no-unsafe-assignment
-const uploadStorage = memoryStorage();
+
 
 @ApiTags('Invoice')
 @ApiBearerAuth()
@@ -306,11 +303,7 @@ export class InvoiceController {
         { name: 'ownerId', maxCount: 1 },
         { name: 'otherDocument', maxCount: 1 },
       ],
-      {
-        // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
-        storage: uploadStorage as MulterOptions['storage'],
-        fileFilter: DOCUMENT_FILE_FILTER,
-      },
+      DOCUMENT_UPLOAD_OPTIONS,
     ),
   )
   uploadPurchaseDocuments(
