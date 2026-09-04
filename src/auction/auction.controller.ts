@@ -31,12 +31,10 @@ import { UpdateAuctionVehicleDto } from './dto/update-auction-vehicle.dto';
 import { PaginationQueryDto } from 'src/common/dto/pagination-query.dto';
 import { AuctionStatus } from 'src/common/enum/auctionStatus.enum';
 import { FileFieldsInterceptor } from '@nestjs/platform-express';
-import { memoryStorage } from 'multer';
-import { DOCUMENT_FILE_FILTER } from 'src/common/utils/document-upload.util';
+import { DOCUMENT_UPLOAD_OPTIONS } from 'src/common/utils/document-upload.util';
 import type { Express } from 'express';
-import type { MulterOptions } from '@nestjs/platform-express/multer/interfaces/multer-options.interface';
 
-const uploadStorage = memoryStorage();
+
 
 @ApiTags('Auction')
 @ApiBearerAuth()
@@ -246,10 +244,7 @@ export class AuctionController {
         { name: 'vehicleBack', maxCount: 1 },
         { name: 'vehicleInterior', maxCount: 1 },
       ],
-      {
-        storage: uploadStorage as MulterOptions['storage'],
-        fileFilter: DOCUMENT_FILE_FILTER,
-      },
+      DOCUMENT_UPLOAD_OPTIONS,
     ),
   )
   uploadVehicleImages(

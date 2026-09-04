@@ -13,7 +13,7 @@ import {
   BadRequestException,
 } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
-import { memoryStorage } from 'multer';
+
 import type { Express } from 'express';
 import { OrganizationsService } from './organizations.service';
 import { CreateOrganizationDto } from './dto/create-organization.dto';
@@ -24,7 +24,7 @@ import { Roles } from 'src/common/decorators/roles.decorators';
 import { Role } from 'src/common/enum/role.enum';
 import { GetUser } from 'src/common/decorators/user.decorator';
 import type { AuthenticatedUser } from 'src/common/interface/authenticated-user.interface';
-import { DOCUMENT_FILE_FILTER } from 'src/common/utils/document-upload.util';
+import { DOCUMENT_UPLOAD_OPTIONS } from 'src/common/utils/document-upload.util';
 import {
   ApiBearerAuth,
   ApiTags,
@@ -41,7 +41,7 @@ import { UpdateLetterSettingsDto } from './dto/update-letter-settings.dto';
 import { OrganizationFacilitySettingsService } from './organization-facility-settings.service';
 import { UpdateFacilitySettingsDto } from './dto/update-facility-settings.dto';
 
-const uploadStorage = memoryStorage();
+
 
 @ApiTags('Organizations')
 @ApiBearerAuth()
@@ -149,11 +149,7 @@ export class OrganizationsController {
   @ApiConsumes('multipart/form-data')
   @ApiOperation({ summary: 'Upload logo, RVSF logo, or signature' })
   @UseInterceptors(
-    FileInterceptor('file', {
-      storage: uploadStorage,
-      fileFilter: DOCUMENT_FILE_FILTER,
-      limits: { fileSize: 5 * 1024 * 1024 },
-    }),
+    FileInterceptor('file', DOCUMENT_UPLOAD_OPTIONS),
   )
   uploadLetterAsset(
     @GetUser() user: AuthenticatedUser,

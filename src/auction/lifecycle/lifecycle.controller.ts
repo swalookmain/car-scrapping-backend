@@ -12,7 +12,7 @@ import {
 } from '@nestjs/common';
 import { ApiBearerAuth, ApiBody, ApiConsumes, ApiTags } from '@nestjs/swagger';
 import { FileInterceptor } from '@nestjs/platform-express';
-import { memoryStorage } from 'multer';
+
 import type { Express } from 'express';
 import { jwtAuthGuard } from 'src/common/guards/jwt-auth.guard';
 import { RolesGuard } from 'src/common/guards/roles.guard';
@@ -20,7 +20,7 @@ import { Roles } from 'src/common/decorators/roles.decorators';
 import { Role } from 'src/common/enum/role.enum';
 import { GetUser } from 'src/common/decorators/user.decorator';
 import type { AuthenticatedUser } from 'src/common/interface/authenticated-user.interface';
-import { DOCUMENT_FILE_FILTER } from 'src/common/utils/document-upload.util';
+import { DOCUMENT_UPLOAD_OPTIONS } from 'src/common/utils/document-upload.util';
 import { LifecycleService } from './lifecycle.service';
 import { UpdateLotOutcomeBatchDto } from './dto/update-lot-outcome.dto';
 import { CreateLotPaymentDto } from './dto/create-lot-payment.dto';
@@ -29,7 +29,7 @@ import { UpdateLotDeliveryDto } from './dto/update-lot-delivery.dto';
 import { UpdateLotRcmDto } from './dto/update-lot-rcm.dto';
 import { AddLotPenaltyDto } from './dto/add-lot-penalty.dto';
 
-const uploadStorage = memoryStorage();
+
 
 @ApiTags('Auction Lifecycle')
 @ApiBearerAuth()
@@ -111,10 +111,7 @@ export class LifecycleController {
     },
   })
   @UseInterceptors(
-    FileInterceptor('file', {
-      storage: uploadStorage,
-      fileFilter: DOCUMENT_FILE_FILTER,
-    }),
+    FileInterceptor('file', DOCUMENT_UPLOAD_OPTIONS),
   )
   uploadGatePass(
     @Param('lotId') lotId: string,
