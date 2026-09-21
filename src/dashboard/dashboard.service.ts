@@ -2,6 +2,13 @@ import { ForbiddenException, Injectable } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types } from 'mongoose';
 import { AuthenticatedUser } from 'src/common/interface/authenticated-user.interface';
+import {
+  andMongoFilters,
+  isStaffUser,
+  staffInvoiceOwnerFilter,
+  staffLeadOwnerFilter,
+  staffYardOwnerFilter,
+} from 'src/common/access/data-scope';
 import { LeadStatus } from 'src/common/enum/leadStatus.enum';
 import { AuctionStatus } from 'src/common/enum/auctionStatus.enum';
 import { YardVehicleStatus } from 'src/common/enum/yardVehicleStatus.enum';
@@ -63,6 +70,41 @@ export class DashboardService {
     }
 
     const orgObjectId = new Types.ObjectId(orgId);
+    const staffLeadFilter = staffLeadOwnerFilter(authenticatedUser);
+    const ownedLeadIds = isStaffUser(authenticatedUser)
+      ? ((await this.leadModel
+          .find(
+            andMongoFilters(
+              { organizationId: orgObjectId },
+              staffLeadFilter,
+            ),
+          )
+          .select('_id')
+          .lean()) as Array<{ _id: Types.ObjectId }>).map((row) => row._id)
+      : [];
+    const staffInvoiceFilter = staffInvoiceOwnerFilter(
+      authenticatedUser,
+      ownedLeadIds,
+    );
+    const accessibleInvoiceIds = isStaffUser(authenticatedUser)
+      ? ((await this.invoiceModel
+          .find(
+            andMongoFilters(
+              { organizationId: orgObjectId },
+              staffInvoiceFilter,
+            ),
+          )
+          .select('_id')
+          .lean()) as Array<{ _id: Types.ObjectId }>).map((row) => row._id)
+      : [];
+    const staffYardFilter = staffYardOwnerFilter(
+      authenticatedUser,
+      ownedLeadIds,
+      accessibleInvoiceIds,
+    );
+    const staffCreatedBy = isStaffUser(authenticatedUser)
+      ? { createdBy: new Types.ObjectId(authenticatedUser.userId) }
+      : null;
     const now = new Date();
     const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
     const prevMonthStart = new Date(now.getFullYear(), now.getMonth() - 1, 1);
@@ -79,6 +121,9 @@ export class DashboardService {
     const sixWeeksAgo = new Date(now.getTime() - 42 * 24 * 60 * 60 * 1000);
     const sevenDaysAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
     const yardStatuses = Object.values(YardVehicleStatus);
+    const staffInvoiceIdMatch = isStaffUser(authenticatedUser)
+      ? { invoiceId: { $in: accessibleInvoiceIds } }
+      : null;
     const notDeletedInvoice = {
       $or: [{ isDeleted: { $ne: true } }, { isDeleted: { $exists: false } }],
     };
@@ -108,87 +153,146 @@ export class DashboardService {
       ...yardCountResults
     ] = await Promise.all([
       this.organizationModel.findById(orgId).select('name').lean(),
-      this.leadModel.countDocuments({
-        organizationId: orgObjectId,
-        status: LeadStatus.OPEN,
-      }),
-      this.leadModel.countDocuments({
-        organizationId: orgObjectId,
-        status: LeadStatus.IN_PROCESS,
-      }),
-      this.auctionModel.countDocuments({
-        organizationId: orgObjectId,
-        status: { $in: [AuctionStatus.UPCOMING, AuctionStatus.ONGOING] },
-        endDateTime: { $gte: now },
-      }),
-      this.invoiceModel.countDocuments({
-        organizationId: orgObjectId,
-        purchaseDate: { $gte: monthStart, $lte: now },
-        ...notDeletedInvoice,
-      }),
-      this.invoiceModel.countDocuments({
-        organizationId: orgObjectId,
-        purchaseDate: { $gte: prevMonthStart, $lte: prevMonthEnd },
-        ...notDeletedInvoice,
-      }),
-      this.invoiceModel.countDocuments({
-        organizationId: orgObjectId,
-        ...notDeletedInvoice,
-      }),
-      this.sumSalesRevenue(orgId, monthStart, now),
-      this.sumSalesRevenue(orgId, prevMonthStart, prevMonthEnd),
-      this.sumPurchaseSpend(orgId, monthStart, now),
-      this.sumPurchaseSpend(orgId, prevMonthStart, prevMonthEnd),
-      this.salesInvoiceModel.countDocuments({
-        organizationId: orgObjectId,
-        status: SalesInvoiceStatus.CONFIRMED,
-        invoiceDate: { $gte: monthStart, $lte: now },
-      }),
-      this.codModel.countDocuments({
-        organizationId: orgObjectId,
-        codGenerated: false,
-      }),
-      this.codModel.countDocuments({
-        organizationId: orgObjectId,
-        rtoStatus: { $ne: RtoStatus.APPROVED },
-      }),
-      this.salesInvoiceModel.countDocuments({
-        organizationId: orgObjectId,
-        status: SalesInvoiceStatus.DRAFT,
-      }),
-      this.leadModel.countDocuments({
-        organizationId: orgObjectId,
-        status: { $in: [LeadStatus.OPEN, LeadStatus.IN_PROCESS] },
-        updatedAt: { $lt: sevenDaysAgo },
-      }),
-      this.countPartsInStock(orgObjectId),
+      this.leadModel.countDocuments(
+        andMongoFilters(
+          { organizationId: orgObjectId, status: LeadStatus.OPEN },
+          staffLeadFilter,
+        ),
+      ),
+      this.leadModel.countDocuments(
+        andMongoFilters(
+          { organizationId: orgObjectId, status: LeadStatus.IN_PROCESS },
+          staffLeadFilter,
+        ),
+      ),
+      this.auctionModel.countDocuments(
+        andMongoFilters(
+          {
+            organizationId: orgObjectId,
+            status: { $in: [AuctionStatus.UPCOMING, AuctionStatus.ONGOING] },
+            endDateTime: { $gte: now },
+          },
+          staffCreatedBy,
+        ),
+      ),
+      this.invoiceModel.countDocuments(
+        andMongoFilters(
+          {
+            organizationId: orgObjectId,
+            purchaseDate: { $gte: monthStart, $lte: now },
+          },
+          notDeletedInvoice,
+          staffInvoiceFilter,
+        ),
+      ),
+      this.invoiceModel.countDocuments(
+        andMongoFilters(
+          {
+            organizationId: orgObjectId,
+            purchaseDate: { $gte: prevMonthStart, $lte: prevMonthEnd },
+          },
+          notDeletedInvoice,
+          staffInvoiceFilter,
+        ),
+      ),
+      this.invoiceModel.countDocuments(
+        andMongoFilters(
+          { organizationId: orgObjectId },
+          notDeletedInvoice,
+          staffInvoiceFilter,
+        ),
+      ),
+      this.sumSalesRevenue(orgId, monthStart, now, staffCreatedBy),
+      this.sumSalesRevenue(orgId, prevMonthStart, prevMonthEnd, staffCreatedBy),
+      this.sumPurchaseSpend(orgId, monthStart, now, staffInvoiceFilter),
+      this.sumPurchaseSpend(orgId, prevMonthStart, prevMonthEnd, staffInvoiceFilter),
+      this.salesInvoiceModel.countDocuments(
+        andMongoFilters(
+          {
+            organizationId: orgObjectId,
+            status: SalesInvoiceStatus.CONFIRMED,
+            invoiceDate: { $gte: monthStart, $lte: now },
+          },
+          staffCreatedBy,
+        ),
+      ),
+      this.codModel.countDocuments(
+        andMongoFilters(
+          { organizationId: orgObjectId, codGenerated: false },
+          staffInvoiceIdMatch,
+        ),
+      ),
+      this.codModel.countDocuments(
+        andMongoFilters(
+          {
+            organizationId: orgObjectId,
+            rtoStatus: { $ne: RtoStatus.APPROVED },
+          },
+          staffInvoiceIdMatch,
+        ),
+      ),
+      this.salesInvoiceModel.countDocuments(
+        andMongoFilters(
+          {
+            organizationId: orgObjectId,
+            status: SalesInvoiceStatus.DRAFT,
+          },
+          staffCreatedBy,
+        ),
+      ),
+      this.leadModel.countDocuments(
+        andMongoFilters(
+          {
+            organizationId: orgObjectId,
+            status: { $in: [LeadStatus.OPEN, LeadStatus.IN_PROCESS] },
+            updatedAt: { $lt: sevenDaysAgo },
+          },
+          staffLeadFilter,
+        ),
+      ),
+      this.countPartsInStock(orgObjectId, accessibleInvoiceIds, isStaffUser(authenticatedUser)),
       this.auctionModel
-        .find({
-          organizationId: orgObjectId,
-          status: { $in: [AuctionStatus.UPCOMING, AuctionStatus.ONGOING] },
-          endDateTime: { $gte: now, $lte: twoDaysAhead },
-        })
+        .find(
+          andMongoFilters(
+            {
+              organizationId: orgObjectId,
+              status: { $in: [AuctionStatus.UPCOMING, AuctionStatus.ONGOING] },
+              endDateTime: { $gte: now, $lte: twoDaysAhead },
+            },
+            staffCreatedBy,
+          ),
+        )
         .select('auctionNumber endDateTime _id')
         .sort({ endDateTime: 1 })
         .limit(5)
         .lean(),
       this.auctionModel
-        .find({
-          organizationId: orgObjectId,
-          status: { $in: [AuctionStatus.UPCOMING, AuctionStatus.ONGOING] },
-          endDateTime: { $gte: now },
-        })
+        .find(
+          andMongoFilters(
+            {
+              organizationId: orgObjectId,
+              status: { $in: [AuctionStatus.UPCOMING, AuctionStatus.ONGOING] },
+              endDateTime: { $gte: now },
+            },
+            staffCreatedBy,
+          ),
+        )
         .select('auctionNumber endDateTime startDateTime auctionerName status')
         .sort({ endDateTime: 1 })
         .limit(6)
         .lean(),
-      this.getWeeklyPurchaseTrend(orgId, sixWeeksAgo, now),
-      this.getWeeklySalesTrend(orgId, sixWeeksAgo, now),
+      this.getWeeklyPurchaseTrend(orgId, sixWeeksAgo, now, staffInvoiceFilter),
+      this.getWeeklySalesTrend(orgId, sixWeeksAgo, now, staffCreatedBy),
       ...yardStatuses.map((status) =>
-        this.yardVehicleModel.countDocuments({
-          organizationId: orgObjectId,
-          currentStatus: status,
-        }),
+        this.yardVehicleModel.countDocuments(
+          andMongoFilters(
+            {
+              organizationId: orgObjectId,
+              currentStatus: status,
+            },
+            staffYardFilter,
+          ),
+        ),
       ),
     ]);
 
@@ -333,17 +437,26 @@ export class DashboardService {
     orgId: string,
     from: Date,
     to: Date,
+    staffFilter: Record<string, unknown> | null,
   ): Promise<Array<{ week: string; amount: number }>> {
     const rows = await this.invoiceModel.aggregate<{
       _id: string;
       amount: number;
     }>([
       {
-        $match: {
-          organizationId: new Types.ObjectId(orgId),
-          purchaseDate: { $gte: from, $lte: to },
-          $or: [{ isDeleted: { $ne: true } }, { isDeleted: { $exists: false } }],
-        },
+        $match: andMongoFilters(
+          {
+            organizationId: new Types.ObjectId(orgId),
+            purchaseDate: { $gte: from, $lte: to },
+          },
+          {
+            $or: [
+              { isDeleted: { $ne: true } },
+              { isDeleted: { $exists: false } },
+            ],
+          },
+          staffFilter,
+        ),
       },
       {
         $group: {
@@ -363,17 +476,21 @@ export class DashboardService {
     orgId: string,
     from: Date,
     to: Date,
+    staffFilter: Record<string, unknown> | null,
   ): Promise<Array<{ week: string; amount: number }>> {
     const rows = await this.salesInvoiceModel.aggregate<{
       _id: string;
       amount: number;
     }>([
       {
-        $match: {
-          organizationId: new Types.ObjectId(orgId),
-          status: SalesInvoiceStatus.CONFIRMED,
-          invoiceDate: { $gte: from, $lte: to },
-        },
+        $match: andMongoFilters(
+          {
+            organizationId: new Types.ObjectId(orgId),
+            status: SalesInvoiceStatus.CONFIRMED,
+            invoiceDate: { $gte: from, $lte: to },
+          },
+          staffFilter,
+        ),
       },
       {
         $group: {
@@ -411,14 +528,23 @@ export class DashboardService {
     orgId: string,
     from: Date,
     to: Date,
+    staffFilter: Record<string, unknown> | null,
   ): Promise<number> {
     const result = await this.invoiceModel.aggregate<{ total: number }>([
       {
-        $match: {
-          organizationId: new Types.ObjectId(orgId),
-          purchaseDate: { $gte: from, $lte: to },
-          $or: [{ isDeleted: { $ne: true } }, { isDeleted: { $exists: false } }],
-        },
+        $match: andMongoFilters(
+          {
+            organizationId: new Types.ObjectId(orgId),
+            purchaseDate: { $gte: from, $lte: to },
+          },
+          {
+            $or: [
+              { isDeleted: { $ne: true } },
+              { isDeleted: { $exists: false } },
+            ],
+          },
+          staffFilter,
+        ),
       },
       { $group: { _id: null, total: { $sum: '$purchaseAmount' } } },
     ]);
@@ -429,22 +555,33 @@ export class DashboardService {
     orgId: string,
     from: Date,
     to: Date,
+    staffFilter: Record<string, unknown> | null,
   ): Promise<number> {
     const result = await this.salesInvoiceModel.aggregate<{ total: number }>([
       {
-        $match: {
-          organizationId: new Types.ObjectId(orgId),
-          status: SalesInvoiceStatus.CONFIRMED,
-          invoiceDate: { $gte: from, $lte: to },
-        },
+        $match: andMongoFilters(
+          {
+            organizationId: new Types.ObjectId(orgId),
+            status: SalesInvoiceStatus.CONFIRMED,
+            invoiceDate: { $gte: from, $lte: to },
+          },
+          staffFilter,
+        ),
       },
       { $group: { _id: null, total: { $sum: '$totalAmount' } } },
     ]);
     return result[0]?.total ?? 0;
   }
 
-  private async countPartsInStock(orgId: Types.ObjectId): Promise<number> {
+  private async countPartsInStock(
+    orgId: Types.ObjectId,
+    invoiceIds: Types.ObjectId[],
+    staffScoped: boolean,
+  ): Promise<number> {
     const result = await this.inventoryModel.aggregate<{ total: number }>([
+      ...(staffScoped
+        ? [{ $match: { invoiceId: { $in: invoiceIds } } }]
+        : []),
       {
         $lookup: {
           from: 'invoices',

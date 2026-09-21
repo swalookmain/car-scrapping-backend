@@ -11,16 +11,20 @@ import { GetUser } from 'src/common/decorators/user.decorator';
 import { Role } from 'src/common/enum/role.enum';
 import { jwtAuthGuard } from 'src/common/guards/jwt-auth.guard';
 import { RolesGuard } from 'src/common/guards/roles.guard';
+import { ModulesGuard } from 'src/common/guards/modules.guard';
 import type { AuthenticatedUser } from 'src/common/interface/authenticated-user.interface';
 import { CreateEwayBillRecordDto } from './dto/create-eway-bill-record.dto';
 import { QueryGstAuditLogDto } from './dto/query-gst-audit-log.dto';
 import { UpsertTaxConfigDto } from './dto/upsert-tax-config.dto';
 import { TaxComplianceService } from './tax-compliance.service';
+import { SetModule } from 'src/common/decorators/set-module.decorator';
+import { APP_MODULES } from 'src/common/access/app-modules';
 
 @ApiTags('Tax Compliance')
 @ApiBearerAuth()
 @Controller('tax-compliance')
-@UseGuards(jwtAuthGuard, RolesGuard)
+@UseGuards(jwtAuthGuard, RolesGuard, ModulesGuard)
+@SetModule(APP_MODULES.TAX.id)
 export class TaxComplianceController {
   constructor(private readonly taxComplianceService: TaxComplianceService) {}
 

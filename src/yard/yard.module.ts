@@ -11,6 +11,8 @@ import { YardMovementRepository } from './yard-movement.repository';
 import { InvoiceModule } from 'src/invoice/invoice.module';
 import { AuditLogModule } from 'src/audit-log/audit-log.module';
 import { AuctionModule } from 'src/auction/auction.module';
+import { LeadModule } from 'src/lead/lead.module';
+import { LiftingModule } from 'src/lifting/lifting.module';
 
 @Module({
   imports: [
@@ -22,6 +24,8 @@ import { AuctionModule } from 'src/auction/auction.module';
     forwardRef(() => InvoiceModule),
     forwardRef(() => AuctionModule),
     AuditLogModule,
+    forwardRef(() => LeadModule),
+    LiftingModule,
   ],
   controllers: [YardController],
   providers: [

@@ -17,6 +17,7 @@ import { CreateVechileInvoiceBatchDto } from './dto/create-vechile-invoice-batch
 import { UpdateVechileInvoiceDto } from './dto/update-vechile-invoice.dto';
 import { jwtAuthGuard } from 'src/common/guards/jwt-auth.guard';
 import { RolesGuard } from 'src/common/guards/roles.guard';
+import { ModulesGuard } from 'src/common/guards/modules.guard';
 import { Roles } from 'src/common/decorators/roles.decorators';
 import { Role } from 'src/common/enum/role.enum';
 import { GetUser } from 'src/common/decorators/user.decorator';
@@ -37,13 +38,14 @@ import { FileFieldsInterceptor } from '@nestjs/platform-express';
 import { UploadedFiles, UseInterceptors } from '@nestjs/common';
 import type { Express } from 'express';
 import { DOCUMENT_UPLOAD_OPTIONS } from 'src/common/utils/document-upload.util';
-
-
+import { SetModule } from 'src/common/decorators/set-module.decorator';
+import { APP_MODULES } from 'src/common/access/app-modules';
 
 @ApiTags('Invoice')
 @ApiBearerAuth()
 @Controller('invoice')
-@UseGuards(jwtAuthGuard, RolesGuard)
+@UseGuards(jwtAuthGuard, RolesGuard, ModulesGuard)
+@SetModule(APP_MODULES.INVOICES.id)
 export class InvoiceController {
   constructor(private readonly invoiceService: InvoiceService) {}
 
@@ -185,8 +187,11 @@ export class InvoiceController {
   @ApiOperation({ summary: 'Get invoice by ID' })
   @ApiResponse({ status: 200, description: 'Invoice retrieved successfully' })
   @ApiResponse({ status: 404, description: 'Invoice not found' })
-  getInvoiceById(@Param('id') id: string) {
-    return this.invoiceService.getInvoiceById(id);
+  getInvoiceById(
+    @Param('id') id: string,
+    @GetUser() authenticatedUser: AuthenticatedUser,
+  ) {
+    return this.invoiceService.getInvoiceById(id, authenticatedUser);
   }
 
   @Get('vechile/:id')
@@ -197,8 +202,11 @@ export class InvoiceController {
     description: 'Vechile invoice retrieved successfully',
   })
   @ApiResponse({ status: 404, description: 'Vechile invoice not found' })
-  getVechileInvoiceById(@Param('id') id: string) {
-    return this.invoiceService.getVechileInvoiceById(id);
+  getVechileInvoiceById(
+    @Param('id') id: string,
+    @GetUser() authenticatedUser: AuthenticatedUser,
+  ) {
+    return this.invoiceService.getVechileInvoiceById(id, authenticatedUser);
   }
 
   @Patch(':id')

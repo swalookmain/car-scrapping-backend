@@ -46,29 +46,48 @@ export class LeadRepository extends BaseRepository<LeadDocument> {
     return this.model.findById(id).populate(this.userPopulate).lean().exec();
   }
 
+  async findOwnedLeadIds(organizationId: string, userId: string) {
+    const staffId = new Types.ObjectId(userId);
+    const rows = await this.model
+      .find({
+        organizationId: new Types.ObjectId(organizationId),
+        $or: [{ createdBy: staffId }, { assignedTo: staffId }],
+      })
+      .select('_id')
+      .lean()
+      .exec();
+    return rows.map((row) => row._id as Types.ObjectId);
+  }
+
   async findLookupCandidates(
     organizationId: string,
     q: string | undefined,
-    assignedUserId?: string,
+    ownerUserId?: string,
   ) {
     const filter: Record<string, unknown> = {
       organizationId: new Types.ObjectId(organizationId),
-      status: { $nin: ['CLOSED', 'CANCELLED'] },
+      status: 'CLOSED',
       isInterested: { $ne: false },
-      invoiceId: { $exists: false },
+      $or: [{ invoiceId: { $exists: false } }, { invoiceId: null }],
     };
 
-    if (assignedUserId) {
-      filter.assignedTo = new Types.ObjectId(assignedUserId);
+    if (ownerUserId) {
+      const staffId = new Types.ObjectId(ownerUserId);
+      filter.$and = [
+        { $or: [{ assignedTo: staffId }, { createdBy: staffId }] },
+      ];
     }
 
     if (q?.trim()) {
       const expression = new RegExp(q.trim(), 'i');
-      filter.$or = [
-        { name: expression },
-        { ownerName: expression },
-        { vehicleName: expression },
-      ];
+      const search = {
+        $or: [
+          { name: expression },
+          { ownerName: expression },
+          { vehicleName: expression },
+        ],
+      };
+      filter.$and = [...((filter.$and as unknown[]) || []), search];
     }
 
     return this.model

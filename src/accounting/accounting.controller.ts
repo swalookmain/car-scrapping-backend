@@ -18,6 +18,7 @@ import { GetUser } from 'src/common/decorators/user.decorator';
 import { Role } from 'src/common/enum/role.enum';
 import { jwtAuthGuard } from 'src/common/guards/jwt-auth.guard';
 import { RolesGuard } from 'src/common/guards/roles.guard';
+import { ModulesGuard } from 'src/common/guards/modules.guard';
 import type { AuthenticatedUser } from 'src/common/interface/authenticated-user.interface';
 import { ChartOfAccountsService } from './services/chart-of-accounts.service';
 import { LedgerEntryRepository } from './repositories/ledger-entry.repository';
@@ -26,11 +27,14 @@ import { InvoicePaymentService } from './services/invoice-payment.service';
 import { LedgerQueryDto } from './dto/ledger-query.dto';
 import { PnlQueryDto } from './dto/pnl-query.dto';
 import { CreateInvoicePaymentRecordDto } from './dto/create-invoice-payment-record.dto';
+import { SetModule } from 'src/common/decorators/set-module.decorator';
+import { APP_MODULES } from 'src/common/access/app-modules';
 
 @ApiTags('Accounting')
 @ApiBearerAuth()
 @Controller('accounting')
-@UseGuards(jwtAuthGuard, RolesGuard)
+@UseGuards(jwtAuthGuard, RolesGuard, ModulesGuard)
+@SetModule(APP_MODULES.ACCOUNTING.id)
 export class AccountingController {
   constructor(
     private readonly chartOfAccountsService: ChartOfAccountsService,

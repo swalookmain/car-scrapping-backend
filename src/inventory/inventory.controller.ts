@@ -16,6 +16,7 @@ import {
 import { UpdateInventoryDto } from './dto/update-inventory.dto';
 import { jwtAuthGuard } from 'src/common/guards/jwt-auth.guard';
 import { RolesGuard } from 'src/common/guards/roles.guard';
+import { ModulesGuard } from 'src/common/guards/modules.guard';
 import { Roles } from 'src/common/decorators/roles.decorators';
 import { Role } from 'src/common/enum/role.enum';
 import { GetUser } from 'src/common/decorators/user.decorator';
@@ -30,11 +31,14 @@ import {
 import { PaginationQueryDto } from 'src/common/dto/pagination-query.dto';
 import { Condition } from 'src/common/enum/condition.enum';
 import { Status } from 'src/common/enum/status.enum';
+import { SetModule } from 'src/common/decorators/set-module.decorator';
+import { APP_MODULES } from 'src/common/access/app-modules';
 
 @ApiTags('Inventory')
 @ApiBearerAuth()
 @Controller('inventory')
-@UseGuards(jwtAuthGuard, RolesGuard)
+@UseGuards(jwtAuthGuard, RolesGuard, ModulesGuard)
+@SetModule(APP_MODULES.INVENTORY.id)
 export class InventoryController {
   constructor(private readonly inventoryService: InventoryService) {}
 
@@ -67,15 +71,19 @@ export class InventoryController {
       status?: Status;
       condition?: Condition;
     },
+    @GetUser() authenticatedUser: AuthenticatedUser,
   ) {
-    return this.inventoryService.findAll({
-      invoiceId: query.invoiceId,
-      vechileId: query.vechileId,
-      status: query.status,
-      condition: query.condition,
-      page: query.page,
-      limit: query.limit,
-    });
+    return this.inventoryService.findAll(
+      {
+        invoiceId: query.invoiceId,
+        vechileId: query.vechileId,
+        status: query.status,
+        condition: query.condition,
+        page: query.page,
+        limit: query.limit,
+      },
+      authenticatedUser,
+    );
   }
 
   @Get('vehicles')
@@ -91,20 +99,26 @@ export class InventoryController {
       limit: query.limit,
       search: query.search,
       organizationId: user.orgId || undefined,
-    });
+    }, user);
   }
 
   @Get('by-vehicle/:vechileId')
   @Roles(Role.ADMIN, Role.STAFF)
   @ApiOperation({ summary: 'Get all parts for a vehicle' })
-  findByVehicle(@Param('vechileId') vechileId: string) {
-    return this.inventoryService.findByVehicle(vechileId);
+  findByVehicle(
+    @Param('vechileId') vechileId: string,
+    @GetUser() authenticatedUser: AuthenticatedUser,
+  ) {
+    return this.inventoryService.findByVehicle(vechileId, authenticatedUser);
   }
 
   @Get(':id')
   @Roles(Role.ADMIN, Role.STAFF)
-  findOne(@Param('id') id: string) {
-    return this.inventoryService.findOne(id);
+  findOne(
+    @Param('id') id: string,
+    @GetUser() authenticatedUser: AuthenticatedUser,
+  ) {
+    return this.inventoryService.findOne(id, authenticatedUser);
   }
 
   @Patch(':id')
@@ -121,7 +135,10 @@ export class InventoryController {
 
   @Delete(':id')
   @Roles(Role.ADMIN)
-  remove(@Param('id') id: string) {
-    return this.inventoryService.remove(id);
+  remove(
+    @Param('id') id: string,
+    @GetUser() authenticatedUser: AuthenticatedUser,
+  ) {
+    return this.inventoryService.remove(id, authenticatedUser);
   }
 }

@@ -12,6 +12,7 @@ interface JwtPayload {
   orgId: string | null;
   email: string;
   name: string;
+  allowedModules?: string[];
 }
 
 @Injectable()
@@ -46,6 +47,9 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
       orgId: payload.orgId,
       email: payload.email,
       name: payload.name,
+      allowedModules: Array.isArray(payload.allowedModules)
+        ? payload.allowedModules
+        : [],
     };
   }
 }

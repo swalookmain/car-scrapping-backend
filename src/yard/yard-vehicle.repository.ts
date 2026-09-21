@@ -85,6 +85,13 @@ export class YardVehicleRepository extends BaseRepository<YardVehicleDocument> {
     });
   }
 
+  findByLeadId(organizationId: string, leadId: string) {
+    return this.model.findOne({
+      organizationId: new Types.ObjectId(organizationId),
+      leadId: new Types.ObjectId(leadId),
+    });
+  }
+
   countByStatus(organizationId: string, status: string) {
     return this.model.countDocuments({
       organizationId: new Types.ObjectId(organizationId),

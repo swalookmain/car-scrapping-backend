@@ -46,6 +46,13 @@ import { LeadSource } from 'src/common/enum/leadSource.enum';
 import type { LeadDocument } from 'src/lead/lead.schema';
 import { AuctionService } from 'src/auction/auction.service';
 import { YardService } from 'src/yard/yard.service';
+import {
+  andMongoFilters,
+  isStaffUser,
+  sameOrganization,
+  staffInvoiceOwnerFilter,
+  staffOwnsInvoiceRecord,
+} from 'src/common/access/data-scope';
 
 @Injectable()
 export class InvoiceService {
@@ -308,20 +315,6 @@ export class InvoiceService {
           await this.updateInvoice(
             invoice._id.toString(),
             { status: InvoiceStatus.CONFIRMED },
-            authenticatedUser,
-          );
-        }
-        const rawInvoiceLeadId: unknown = invoice.leadId;
-        const invoiceLeadId =
-          rawInvoiceLeadId instanceof Types.ObjectId
-            ? rawInvoiceLeadId.toString()
-            : typeof rawInvoiceLeadId === 'string'
-              ? rawInvoiceLeadId
-              : undefined;
-        if (invoiceLeadId) {
-          await this.leadService.closeLeadForInvoice(
-            invoiceLeadId,
-            invoice._id.toString(),
             authenticatedUser,
           );
         }
@@ -593,9 +586,10 @@ export class InvoiceService {
       }
     }
 
-    async getInvoiceById(invoiceId: string)
+    async getInvoiceById(invoiceId: string, authenticatedUser: AuthenticatedUser)
     {
       try {
+        await this.requireAccessibleInvoice(invoiceId, authenticatedUser);
         const invoice = await this.invoiceRepository.findByIdWithUserNames(invoiceId);
         if(!invoice || invoice.isDeleted) {
           throw new NotFoundException('Invoice not found');
@@ -611,13 +605,21 @@ export class InvoiceService {
         throw new BadRequestException('Failed to get invoice');
       }
     }
-    async getVechileInvoiceById(vechileInvoiceId: string)
+    async getVechileInvoiceById(vechileInvoiceId: string, authenticatedUser: AuthenticatedUser)
     {
       try {
         const vechileInvoice = await this.vehicleInvoiceRepository.findById(vechileInvoiceId);
         if(!vechileInvoice || vechileInvoice.isDeleted) {
           throw new NotFoundException('Vechile invoice not found');
         }
+        const orgId = this.getOrgId(authenticatedUser);
+        if (!sameOrganization(vechileInvoice.organizationId, orgId)) {
+          throw new NotFoundException('Vechile invoice not found');
+        }
+        await this.requireAccessibleInvoice(
+          vechileInvoice.invoiceId?.toString(),
+          authenticatedUser,
+        );
         return vechileInvoice;
       } catch (error) {
         if(error instanceof NotFoundException) {
@@ -638,20 +640,20 @@ export class InvoiceService {
     {
       try {
         const orgId = this.getOrgId(authenticatedUser);
-        console.log('orgId', orgId);
         const { page: safePage, limit: safeLimit } = getPagination(page, limit);
+        const staffFilter = await this.staffInvoiceListFilter(authenticatedUser);
         const { data, total } = await this.invoiceRepository.findPaginatedWithUserNames(
-          {
-            organizationId: new Types.ObjectId(orgId),
-            isDeleted: { $ne: true },
-          },
+          andMongoFilters(
+            {
+              organizationId: new Types.ObjectId(orgId),
+              isDeleted: { $ne: true },
+            },
+            staffFilter,
+          ),
           safePage,
           safeLimit,
         );
-        console.log('data', data);
-        console.log('total', total);
         const totalPages = Math.ceil(total / safeLimit);
-        console.log('totalPages', totalPages);
 
         return {
           data,
@@ -687,9 +689,16 @@ export class InvoiceService {
           isDeleted: { $ne: true },
         };
         if (invoiceId) {
+          await this.requireAccessibleInvoice(
+            validateObjectId(invoiceId, 'Invoice ID'),
+            authenticatedUser,
+          );
           filter.invoiceId = new Types.ObjectId(
             validateObjectId(invoiceId, 'Invoice ID'),
           );
+        } else if (isStaffUser(authenticatedUser)) {
+          const invoiceIds = await this.getAccessibleInvoiceIds(authenticatedUser);
+          filter.invoiceId = { $in: invoiceIds };
         }
         const { page: safePage, limit: safeLimit } = getPagination(page, limit);
         const { data, total } = await this.vehicleInvoiceRepository.findPaginated(
@@ -729,10 +738,10 @@ export class InvoiceService {
         if(!organization) {
           throw new NotFoundException('Organization not found');
         }
-        const invoice = await this.invoiceRepository.findById(invoiceId);
-        if(!invoice) {
-          throw new NotFoundException('Invoice not found');
-        }
+        const invoice = await this.requireAccessibleInvoice(
+          invoiceId,
+          authenticatedUser,
+        );
         if (invoice.status !== InvoiceStatus.CONFIRMED) {
           await this.vehicleInvoiceRepository.deleteManyByInvoiceId(invoiceId);
           const deletedInvoice = await this.invoiceRepository.deleteById(invoiceId);
@@ -961,6 +970,7 @@ export class InvoiceService {
       authenticatedUser: AuthenticatedUser,
     ) {
       const orgId = this.getOrgId(authenticatedUser);
+      await this.requireAccessibleInvoice(invoiceId, authenticatedUser);
       return this.purchaseDocumentRepository.findByInvoiceAndOrg(
         invoiceId,
         orgId,
@@ -1233,6 +1243,51 @@ export class InvoiceService {
 
     private getDiscriminatorKeyValue(sellerType: SellerType): SellerType {
       return sellerType;
+    }
+
+    async getAccessibleInvoiceIds(authenticatedUser: AuthenticatedUser) {
+      const orgId = this.getOrgId(authenticatedUser);
+      const staffFilter = await this.staffInvoiceListFilter(authenticatedUser);
+      return this.invoiceRepository.findIds(
+        andMongoFilters(
+          {
+            organizationId: new Types.ObjectId(orgId),
+            isDeleted: { $ne: true },
+          },
+          staffFilter,
+        ),
+      );
+    }
+
+    private async staffInvoiceListFilter(authenticatedUser: AuthenticatedUser) {
+      if (!isStaffUser(authenticatedUser)) {
+        return null;
+      }
+      const leadIds = await this.leadService.getOwnedLeadIds(authenticatedUser);
+      return staffInvoiceOwnerFilter(authenticatedUser, leadIds);
+    }
+
+    private async requireAccessibleInvoice(
+      invoiceId: string,
+      authenticatedUser: AuthenticatedUser,
+    ) {
+      const validId = validateObjectId(invoiceId, 'Invoice ID');
+      const invoice = await this.invoiceRepository.findById(validId);
+      if (!invoice || invoice.isDeleted) {
+        throw new NotFoundException('Invoice not found');
+      }
+      const orgId = this.getOrgId(authenticatedUser);
+      if (!sameOrganization(invoice.organizationId, orgId)) {
+        throw new NotFoundException('Invoice not found');
+      }
+      if (isStaffUser(authenticatedUser)) {
+        const leadIds = await this.leadService.getOwnedLeadIds(authenticatedUser);
+        const owned = new Set(leadIds.map((id) => id.toString()));
+        if (!staffOwnsInvoiceRecord(invoice, authenticatedUser, owned)) {
+          throw new NotFoundException('Invoice not found');
+        }
+      }
+      return invoice;
     }
 
     private getOrgId(authenticatedUser: AuthenticatedUser): string {

@@ -31,6 +31,14 @@ import { InventoryFormBucket } from 'src/common/enum/materialFormSection.enum';
 import { WeightUnit } from 'src/common/enum/weightUnit.enum';
 import { StateOfMatter } from 'src/common/enum/stateOfMatter.enum';
 import { MatterClass } from 'src/common/enum/matterClass.enum';
+import { LeadService } from 'src/lead/lead.service';
+import {
+  andMongoFilters,
+  isStaffUser,
+  sameOrganization,
+  staffInvoiceOwnerFilter,
+  staffOwnsInvoiceRecord,
+} from 'src/common/access/data-scope';
 
 @Injectable()
 export class InventoryService {
@@ -42,6 +50,7 @@ export class InventoryService {
     private readonly yardService: YardService,
     private readonly materialMasterService: MaterialMasterService,
     private readonly partCatalogService: PartCatalogService,
+    private readonly leadService: LeadService,
     @Inject(WINSTON_MODULE_NEST_PROVIDER)
     private readonly logger: LoggerService,
   ) {}
@@ -70,7 +79,15 @@ export class InventoryService {
       if (!invoice) {
         throw new NotFoundException('Invoice not found');
       }
+      const orgId = authenticatedUser.orgId;
+      if (!orgId || !sameOrganization(invoice.organizationId, orgId)) {
+        throw new NotFoundException('Invoice not found');
+      }
+      await this.assertStaffCanAccessInvoice(invoice, authenticatedUser);
       if (!vechileInvoice) {
+        throw new NotFoundException('Vehicle invoice not found');
+      }
+      if (!sameOrganization(vechileInvoice.organizationId, orgId)) {
         throw new NotFoundException('Vehicle invoice not found');
       }
       if (vechileInvoice.invoiceId?.toString() !== invoiceId) {
@@ -79,10 +96,10 @@ export class InventoryService {
 
       await this.yardService.assertCanCreateInventory(vechileId);
 
-      const orgId =
+      const resolvedOrgId =
         (vechileInvoice as { organizationId?: Types.ObjectId }).organizationId?.toString() ||
         authenticatedUser.orgId;
-      if (!orgId) {
+      if (!resolvedOrgId) {
         throw new BadRequestException('Organization not found');
       }
 
@@ -199,10 +216,17 @@ export class InventoryService {
       page?: number;
       limit?: number;
     },
+    authenticatedUser: AuthenticatedUser,
   ): Promise<PaginatedResponse<Inventory> | Inventory[]> {
-    const filter: Record<string, unknown> = {};
+    const invoiceIds = await this.getAccessibleInvoiceIds(authenticatedUser);
+    const filter: Record<string, unknown> = {
+      invoiceId: { $in: invoiceIds },
+    };
     if (filters.invoiceId) {
       const validatedId = validateObjectId(filters.invoiceId, 'Invoice ID');
+      if (!invoiceIds.some((id) => id.toString() === validatedId)) {
+        throw new NotFoundException('Invoice not found');
+      }
       filter.invoiceId = new Types.ObjectId(validatedId);
     }
     if (filters.vechileId) {
@@ -241,12 +265,13 @@ export class InventoryService {
     return this.inventoryRepo.findPaginated(filter, 1, 100).then((res) => res.data);
   }
 
-  async findOne(id: string) {
+  async findOne(id: string, authenticatedUser: AuthenticatedUser) {
     const validatedId = validateObjectId(id, 'Inventory ID');
     const record = await this.inventoryRepo.findById(validatedId);
     if (!record) {
       throw new NotFoundException('Inventory not found');
     }
+    await this.assertInventoryAccessible(record, authenticatedUser);
     return record;
   }
 
@@ -260,6 +285,7 @@ export class InventoryService {
     if (!existing) {
       throw new NotFoundException('Inventory not found');
     }
+    await this.assertInventoryAccessible(existing, authenticatedUser);
 
     const sanitizedData = sanitizeObject(updateDto) as UpdateInventoryDto;
 
@@ -360,12 +386,20 @@ export class InventoryService {
     return this.inventoryRepo.updateById(validatedId, updateData);
   }
 
-  async findByVehicle(vechileId: string) {
+  async findByVehicle(vechileId: string, authenticatedUser: AuthenticatedUser) {
     const validatedId = validateObjectId(vechileId, 'Vehicle ID');
     const vehicle = await this.vehicleInvoiceRepo.findById(validatedId);
     if (!vehicle || vehicle.isDeleted) {
       throw new NotFoundException('Vehicle not found');
     }
+    if (!sameOrganization(vehicle.organizationId, authenticatedUser.orgId)) {
+      throw new NotFoundException('Vehicle not found');
+    }
+    const invoice = await this.invoiceRepo.findById(vehicle.invoiceId.toString());
+    if (!invoice) {
+      throw new NotFoundException('Vehicle not found');
+    }
+    await this.assertStaffCanAccessInvoice(invoice, authenticatedUser);
     const parts = await this.inventoryRepo.findByVehicleId(validatedId);
     const totalWeightKg = parts.reduce(
       (sum, p) => sum + (typeof p.weightKg === 'number' ? p.weightKg : 0),
@@ -380,26 +414,36 @@ export class InventoryService {
     };
   }
 
-  async findVehicles(filters: {
-    page?: number;
-    limit?: number;
-    search?: string;
-    organizationId?: string;
-  }) {
+  async findVehicles(
+    filters: {
+      page?: number;
+      limit?: number;
+      search?: string;
+      organizationId?: string;
+    },
+    authenticatedUser: AuthenticatedUser,
+  ) {
     const { page: safePage, limit: safeLimit } = getPagination(
       filters.page,
       filters.limit,
     );
+    const invoiceIds = await this.getAccessibleInvoiceIds(authenticatedUser);
     return this.inventoryRepo.aggregateVehicles({
       page: safePage,
       limit: safeLimit,
       search: filters.search,
       organizationId: filters.organizationId,
+      invoiceIds,
     });
   }
 
-  async remove(id: string) {
+  async remove(id: string, authenticatedUser: AuthenticatedUser) {
     const validatedId = validateObjectId(id, 'Inventory ID');
+    const existing = await this.inventoryRepo.findById(validatedId);
+    if (!existing) {
+      throw new NotFoundException('Inventory not found');
+    }
+    await this.assertInventoryAccessible(existing, authenticatedUser);
     const deleted = await this.inventoryRepo.deleteById(validatedId);
     if (!deleted) {
       throw new NotFoundException('Inventory not found');
@@ -537,5 +581,58 @@ export class InventoryService {
           : new Types.ObjectId(authenticatedUser.userId),
         uploadedAt: doc.uploadedAt ? new Date(doc.uploadedAt) : new Date(),
       }));
+  }
+
+  private async getAccessibleInvoiceIds(authenticatedUser: AuthenticatedUser) {
+    const orgId = authenticatedUser.orgId;
+    if (!orgId) {
+      throw new BadRequestException('Organization not found');
+    }
+    let staffFilter: Record<string, unknown> | null = null;
+    if (isStaffUser(authenticatedUser)) {
+      const leadIds = await this.leadService.getOwnedLeadIds(authenticatedUser);
+      staffFilter = staffInvoiceOwnerFilter(authenticatedUser, leadIds);
+    }
+    return this.invoiceRepo.findIds(
+      andMongoFilters(
+        {
+          organizationId: new Types.ObjectId(orgId),
+          isDeleted: { $ne: true },
+        },
+        staffFilter,
+      ),
+    );
+  }
+
+  private async assertStaffCanAccessInvoice(
+    invoice: { createdBy?: unknown; leadId?: unknown; organizationId?: unknown },
+    authenticatedUser: AuthenticatedUser,
+  ) {
+    if (!isStaffUser(authenticatedUser)) {
+      return;
+    }
+    const leadIds = await this.leadService.getOwnedLeadIds(authenticatedUser);
+    const owned = new Set(leadIds.map((id) => id.toString()));
+    if (!staffOwnsInvoiceRecord(invoice, authenticatedUser, owned)) {
+      throw new NotFoundException('Invoice not found');
+    }
+  }
+
+  private async assertInventoryAccessible(
+    record: { invoiceId?: unknown },
+    authenticatedUser: AuthenticatedUser,
+  ) {
+    const invoiceId = record.invoiceId?.toString();
+    if (!invoiceId) {
+      throw new NotFoundException('Inventory not found');
+    }
+    const invoice = await this.invoiceRepo.findById(invoiceId);
+    if (
+      !invoice ||
+      !sameOrganization(invoice.organizationId, authenticatedUser.orgId)
+    ) {
+      throw new NotFoundException('Inventory not found');
+    }
+    await this.assertStaffCanAccessInvoice(invoice, authenticatedUser);
   }
 }

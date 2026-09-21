@@ -94,6 +94,33 @@ export class Lead extends Document {
   @Prop({ type: Number })
   purchaseAmount?: number;
 
+  @Prop({ type: Number })
+  offerAmount?: number;
+
+  @Prop({ type: Number })
+  counterAmount?: number;
+
+  @Prop({ type: Number })
+  closingAmount?: number;
+
+  @Prop({ type: String, trim: true })
+  codNumber?: string;
+
+  @Prop({ type: String, trim: true })
+  codInwardNumber?: string;
+
+  @Prop({ type: String, trim: true })
+  codDocumentUrl?: string;
+
+  @Prop({ type: String, trim: true })
+  codStorageKey?: string;
+
+  @Prop({ type: Types.ObjectId, ref: 'User' })
+  liftingStaffId?: Types.ObjectId;
+
+  @Prop({ type: Date })
+  expectedArrivalAt?: Date;
+
   @Prop({ type: Date })
   purchaseDate?: Date;
 
@@ -129,4 +156,4 @@ export type LeadDocument = Lead & Document;
 export const LeadSchema = SchemaFactory.createForClass(Lead);
 
 LeadSchema.index({ organizationId: 1, status: 1, assignedTo: 1, createdAt: -1 });
-LeadSchema.index({ organizationId: 1, invoiceId: 1 }, { sparse: true });
+LeadSchema.index({ invoiceId: 1 }, { unique: true, sparse: true });

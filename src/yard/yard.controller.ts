@@ -18,6 +18,7 @@ import {
 import { YardService } from './yard.service';
 import { jwtAuthGuard } from 'src/common/guards/jwt-auth.guard';
 import { RolesGuard } from 'src/common/guards/roles.guard';
+import { ModulesGuard } from 'src/common/guards/modules.guard';
 import { Roles } from 'src/common/decorators/roles.decorators';
 import { Role } from 'src/common/enum/role.enum';
 import { GetUser } from 'src/common/decorators/user.decorator';
@@ -26,11 +27,14 @@ import { QueryYardVehicleDto } from './dto/query-yard-vehicle.dto';
 import { UpdateYardVehicleStatusDto } from './dto/update-yard-vehicle-status.dto';
 import { CreateYardZoneDto } from './dto/create-yard-zone.dto';
 import { AddFromAuctionDto } from './dto/add-from-auction.dto';
+import { SetModule } from 'src/common/decorators/set-module.decorator';
+import { APP_MODULES } from 'src/common/access/app-modules';
 
 @ApiTags('Yard')
 @ApiBearerAuth()
 @Controller('yard')
-@UseGuards(jwtAuthGuard, RolesGuard)
+@UseGuards(jwtAuthGuard, RolesGuard, ModulesGuard)
+@SetModule(APP_MODULES.YARD.id)
 export class YardController {
   constructor(private readonly yardService: YardService) {}
 

@@ -20,6 +20,7 @@ import { CreateOrganizationDto } from './dto/create-organization.dto';
 import { UpdateOrganizationDto } from './dto/update-organization.dto';
 import { jwtAuthGuard } from 'src/common/guards/jwt-auth.guard';
 import { RolesGuard } from 'src/common/guards/roles.guard';
+import { ModulesGuard } from 'src/common/guards/modules.guard';
 import { Roles } from 'src/common/decorators/roles.decorators';
 import { Role } from 'src/common/enum/role.enum';
 import { GetUser } from 'src/common/decorators/user.decorator';
@@ -40,13 +41,14 @@ import { OrganizationLetterSettingsService } from './organization-letter-setting
 import { UpdateLetterSettingsDto } from './dto/update-letter-settings.dto';
 import { OrganizationFacilitySettingsService } from './organization-facility-settings.service';
 import { UpdateFacilitySettingsDto } from './dto/update-facility-settings.dto';
-
-
+import { SetModule } from 'src/common/decorators/set-module.decorator';
+import { APP_MODULES } from 'src/common/access/app-modules';
 
 @ApiTags('Organizations')
 @ApiBearerAuth()
 @Controller('organizations')
-@UseGuards(jwtAuthGuard, RolesGuard)
+@UseGuards(jwtAuthGuard, RolesGuard, ModulesGuard)
+@SetModule(APP_MODULES.ORGANIZATIONS.id)
 export class OrganizationsController {
   constructor(
     private readonly organizationsService: OrganizationsService,
@@ -111,6 +113,7 @@ export class OrganizationsController {
   }
 
   @Get('letter-settings')
+  @SetModule(APP_MODULES.SETTINGS.id)
   @Roles(Role.ADMIN)
   @ApiOperation({ summary: 'Get organization letterhead settings' })
   getLetterSettings(@GetUser() user: AuthenticatedUser) {
@@ -118,6 +121,7 @@ export class OrganizationsController {
   }
 
   @Get('facility-settings')
+  @SetModule(APP_MODULES.AUCTIONS.id)
   @Roles(Role.ADMIN, Role.STAFF)
   @ApiOperation({ summary: 'Get FORM-3 facility settings (header + authorised capacity)' })
   getFacilitySettings(@GetUser() user: AuthenticatedUser) {
@@ -125,6 +129,7 @@ export class OrganizationsController {
   }
 
   @Patch('facility-settings')
+  @SetModule(APP_MODULES.SETTINGS.id)
   @Roles(Role.ADMIN)
   @ApiOperation({ summary: 'Update FORM-3 facility settings' })
   updateFacilitySettings(
@@ -135,6 +140,7 @@ export class OrganizationsController {
   }
 
   @Patch('letter-settings')
+  @SetModule(APP_MODULES.SETTINGS.id)
   @Roles(Role.ADMIN)
   @ApiOperation({ summary: 'Update organization letterhead settings' })
   updateLetterSettings(
@@ -145,6 +151,7 @@ export class OrganizationsController {
   }
 
   @Post('letter-settings/upload')
+  @SetModule(APP_MODULES.SETTINGS.id)
   @Roles(Role.ADMIN)
   @ApiConsumes('multipart/form-data')
   @ApiOperation({ summary: 'Upload logo, RVSF logo, or signature' })

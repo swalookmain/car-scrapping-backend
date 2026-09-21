@@ -195,6 +195,20 @@ export class CreateLeadDto {
 
   @ApiPropertyOptional()
   @EmptyToUndefined()
+  @IsNumber()
+  @Min(0)
+  @IsOptional()
+  offerAmount?: number;
+
+  @ApiPropertyOptional()
+  @EmptyToUndefined()
+  @IsNumber()
+  @Min(0)
+  @IsOptional()
+  counterAmount?: number;
+
+  @ApiPropertyOptional()
+  @EmptyToUndefined()
   @IsDateString()
   @IsOptional()
   purchaseDate?: string;

@@ -4,21 +4,38 @@ import {
   Body,
   Res,
   Req,
+  Get,
   BadRequestException,
+  UseGuards,
 } from '@nestjs/common';
 import type { Response, Request } from 'express';
 import { AuthService } from './auth.service';
 import { CreateAuthDto } from './dto/create-auth.dto';
 import { SignupDto } from './dto/signup.dto';
-import { ApiTags, ApiOperation, ApiResponse } from '@nestjs/swagger';
+import { ApiBearerAuth, ApiTags, ApiOperation, ApiResponse } from '@nestjs/swagger';
 import { extractMetadataFromRequest } from './utils/metadata.util';
+import { Public } from 'src/common/decorators/public.decorator';
+import { SkipModuleCheck } from 'src/common/decorators/skip-module-check.decorator';
+import { jwtAuthGuard } from 'src/common/guards/jwt-auth.guard';
+import { GetUser } from 'src/common/decorators/user.decorator';
+import type { AuthenticatedUser } from 'src/common/interface/authenticated-user.interface';
 
 @ApiTags('Auth')
 @Controller('auth')
+@SkipModuleCheck()
 export class AuthController {
   constructor(private readonly authService: AuthService) {}
 
+  @Get('me')
+  @UseGuards(jwtAuthGuard)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Current user with allowed modules' })
+  getMe(@GetUser() user: AuthenticatedUser) {
+    return this.authService.getMe(user);
+  }
+
   @Post('login')
+  @Public()
   @ApiOperation({ summary: 'User login' })
   @ApiResponse({ status: 200, description: 'Login successful' })
   @ApiResponse({ status: 401, description: 'Invalid credentials' })
@@ -54,6 +71,7 @@ export class AuthController {
   }
 
   @Post('signup')
+  @Public()
   @ApiOperation({ summary: 'Public user signup' })
   @ApiResponse({ status: 201, description: 'Signup successful' })
   @ApiResponse({ status: 409, description: 'Email already exists' })
@@ -86,6 +104,7 @@ export class AuthController {
   }
 
   @Post('refresh')
+  @Public()
   @ApiOperation({ summary: 'Refresh access token' })
   @ApiResponse({ status: 200, description: 'Token refreshed successfully' })
   @ApiResponse({ status: 401, description: 'Invalid refresh token' })
@@ -128,6 +147,7 @@ export class AuthController {
   }
 
   @Post('logout')
+  @Public()
   @ApiOperation({ summary: 'User logout' })
   @ApiResponse({ status: 200, description: 'Logout successful' })
   @ApiResponse({ status: 400, description: 'Invalid request' })

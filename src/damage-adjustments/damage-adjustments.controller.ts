@@ -14,6 +14,7 @@ import {
 } from '@nestjs/swagger';
 import { jwtAuthGuard } from 'src/common/guards/jwt-auth.guard';
 import { RolesGuard } from 'src/common/guards/roles.guard';
+import { ModulesGuard } from 'src/common/guards/modules.guard';
 import { Roles } from 'src/common/decorators/roles.decorators';
 import { Role } from 'src/common/enum/role.enum';
 import { GetUser } from 'src/common/decorators/user.decorator';
@@ -21,11 +22,14 @@ import type { AuthenticatedUser } from 'src/common/interface/authenticated-user.
 import { DamageAdjustmentsService } from './damage-adjustments.service';
 import { CreateDamageAdjustmentDto } from './dto/create-damage-adjustment.dto';
 import { QueryDamageAdjustmentsDto } from './dto/query-damage-adjustments.dto';
+import { SetModule } from 'src/common/decorators/set-module.decorator';
+import { APP_MODULES } from 'src/common/access/app-modules';
 
 @ApiTags('Damage Adjustments')
 @ApiBearerAuth()
 @Controller('damage-adjustments')
-@UseGuards(jwtAuthGuard, RolesGuard)
+@UseGuards(jwtAuthGuard, RolesGuard, ModulesGuard)
+@SetModule(APP_MODULES.INVENTORY.id)
 export class DamageAdjustmentsController {
   constructor(
     private readonly damageAdjustmentsService: DamageAdjustmentsService,

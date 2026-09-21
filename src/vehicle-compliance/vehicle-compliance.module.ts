@@ -10,6 +10,7 @@ import { VehicleComplianceController } from './vehicle-compliance.controller';
 import { VehicleComplianceRepository } from './vehicle-compliance.repository';
 import { InvoiceModule } from 'src/invoice/invoice.module';
 import { AuditLogModule } from 'src/audit-log/audit-log.module';
+import { LeadModule } from 'src/lead/lead.module';
 
 @Module({
   imports: [
@@ -18,6 +19,7 @@ import { AuditLogModule } from 'src/audit-log/audit-log.module';
     ]),
     OrganizationsModule,
     AuditLogModule,
+    LeadModule,
     forwardRef(() => InvoiceModule),
   ],
   controllers: [VehicleComplianceController],

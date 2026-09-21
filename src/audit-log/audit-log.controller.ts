@@ -19,16 +19,20 @@ import {
 } from '@nestjs/swagger';
 import { jwtAuthGuard } from 'src/common/guards/jwt-auth.guard';
 import { RolesGuard } from 'src/common/guards/roles.guard';
+import { ModulesGuard } from 'src/common/guards/modules.guard';
 import { Roles } from 'src/common/decorators/roles.decorators';
 import { GetUser } from 'src/common/decorators/user.decorator';
 import { Role } from 'src/common/enum/role.enum';
 import type { AuthenticatedUser } from 'src/common/interface/authenticated-user.interface';
 import { Types } from 'mongoose';
+import { SetModule } from 'src/common/decorators/set-module.decorator';
+import { APP_MODULES } from 'src/common/access/app-modules';
 
 @ApiTags('Audit Logs')
 @ApiBearerAuth()
 @Controller('audit-logs')
-@UseGuards(jwtAuthGuard, RolesGuard)
+@UseGuards(jwtAuthGuard, RolesGuard, ModulesGuard)
+@SetModule(APP_MODULES.AUDIT_LOGS.id)
 export class AuditLogController {
   constructor(private readonly auditLogService: AuditLogService) {}
 

@@ -30,6 +30,7 @@ import { CreateAuctionVehicleBatchDto } from './dto/create-auction-vehicle.dto';
 import { AuctionVehicleImageType } from './auction-vehicle-document.schema';
 import { LifecycleStateService } from './lifecycle/lifecycle-state.service';
 import { LotOutcomeStatus } from 'src/common/enum/lotOutcomeStatus.enum';
+import { isStaffUser, staffObjectId } from 'src/common/access/data-scope';
 
 @Injectable()
 export class AuctionService implements OnModuleInit {
@@ -67,6 +68,18 @@ export class AuctionService implements OnModuleInit {
       throw new BadRequestException('Organization not found');
     }
     return authenticatedUser.orgId;
+  }
+
+  private assertStaffOwnsAuction(
+    auction: { createdBy?: { toString(): string } },
+    authenticatedUser: AuthenticatedUser,
+  ) {
+    if (
+      isStaffUser(authenticatedUser) &&
+      auction.createdBy?.toString() !== authenticatedUser.userId
+    ) {
+      throw new NotFoundException('Auction not found');
+    }
   }
 
   private getAuctionStatus(auction: {
@@ -272,6 +285,9 @@ export class AuctionService implements OnModuleInit {
     const filter: Record<string, unknown> = {
       organizationId: new Types.ObjectId(orgId),
     };
+    if (isStaffUser(authenticatedUser)) {
+      filter.createdBy = staffObjectId(authenticatedUser);
+    }
     if (status) filter.status = status;
     const { data, total } = await this.auctionRepository.findPaginated(
       filter,
@@ -313,6 +329,7 @@ export class AuctionService implements OnModuleInit {
     const auctionId = validateObjectId(id, 'Auction ID');
     const auction = await this.auctionRepository.findByOrgAndId(orgId, auctionId);
     if (!auction) throw new NotFoundException('Auction not found');
+    this.assertStaffOwnsAuction(auction, authenticatedUser);
     const [lots, vehicles] = await Promise.all([
       this.auctionLotRepository.findByAuction(orgId, auctionId),
       this.auctionVehicleRepository.findByAuction(orgId, auctionId),

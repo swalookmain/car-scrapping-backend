@@ -31,6 +31,7 @@ const services: Array<[string, string]> = [
   ['../src/dashboard/dashboard.service', 'DashboardService'],
   ['../src/part-catalog/part-catalog.service', 'PartCatalogService'],
   ['../src/yard/yard.service', 'YardService'],
+  ['../src/lifting/lifting.service', 'LiftingService'],
   ['../src/vehicle-compliance/vehicle-compliance.service', 'VehicleComplianceService'],
   ['../src/tax-compliance/tax-compliance.service', 'TaxComplianceService'],
   ['../src/sales-dispatch/sales-dispatch.service', 'SalesDispatchService'],

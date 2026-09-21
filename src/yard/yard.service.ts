@@ -1,11 +1,4 @@
-import {
-  BadRequestException,
-  Inject,
-  Injectable,
-  Logger,
-  NotFoundException,
-  OnModuleInit,
-} from '@nestjs/common';
+import { BadRequestException, Inject, Injectable, Logger, NotFoundException, OnModuleInit, forwardRef } from '@nestjs/common';
 import { WINSTON_MODULE_NEST_PROVIDER } from 'nest-winston';
 import type { LoggerService } from '@nestjs/common';
 import { Types } from 'mongoose';
@@ -30,7 +23,18 @@ import { AddFromAuctionDto } from './dto/add-from-auction.dto';
 import { AuctionLotRepository } from 'src/auction/auction-lot.repository';
 import { AuctionVehicleRepository } from 'src/auction/auction-vehicle.repository';
 import { AuctionRepository } from 'src/auction/auction.repository';
+import { LeadService } from 'src/lead/lead.service';
+import { LiftingService } from 'src/lifting/lifting.service';
 import { LotOutcomeStatus } from 'src/common/enum/lotOutcomeStatus.enum';
+import {
+  andMongoFilters,
+  isStaffUser,
+  sameOrganization,
+  staffInvoiceOwnerFilter,
+  staffOwnsInvoiceRecord,
+  staffYardOwnerFilter,
+  extractIdString,
+} from 'src/common/access/data-scope';
 const DEFAULT_ZONES = [
   { name: 'Receiving', code: 'RECEIVING' },
   { name: 'Parking A', code: 'PARKING_A' },
@@ -51,6 +55,9 @@ export class YardService implements OnModuleInit {
     private readonly auctionLotRepository: AuctionLotRepository,
     private readonly auctionVehicleRepository: AuctionVehicleRepository,
     private readonly auctionRepository: AuctionRepository,
+    @Inject(forwardRef(() => LeadService))
+    private readonly leadService: LeadService,
+    private readonly liftingService: LiftingService,
     private readonly auditLogService: AuditLogService,
     @Inject(WINSTON_MODULE_NEST_PROVIDER)
     private readonly logger: LoggerService,
@@ -111,6 +118,58 @@ export class YardService implements OnModuleInit {
     }
   }
 
+  async ensureYardEntryForLead(
+    lead: {
+      _id: Types.ObjectId;
+      registrationNumber?: string;
+      vehicleName?: string;
+      variant?: string;
+      codNumber?: string;
+      expectedArrivalAt?: Date;
+    },
+    authenticatedUser: AuthenticatedUser,
+  ) {
+    const orgId = this.getOrgId(authenticatedUser);
+    const userId = this.getUserId(authenticatedUser);
+    await this.ensureDefaultZones(orgId, userId);
+
+    const existing = await this.yardVehicleRepository.findByLeadId(
+      orgId,
+      lead._id.toString(),
+    );
+    if (existing) {
+      return existing;
+    }
+
+    const registrationNumber = (
+      lead.registrationNumber || 'PENDING'
+    ).toUpperCase();
+    const created = await this.yardVehicleRepository.create({
+      organizationId: new Types.ObjectId(orgId),
+      leadId: lead._id,
+      registrationNumber,
+      make: lead.vehicleName,
+      modelName: lead.variant,
+      sourceType: YardSourceType.LEAD,
+      currentStatus: YardVehicleStatus.AWAITING_ARRIVAL,
+      arrivedAt: lead.expectedArrivalAt,
+      codNumber: lead.codNumber,
+      createdBy: userId,
+    });
+
+    await this.recordMovement({
+      orgId,
+      yardVehicleId: created._id,
+      fromStatus: undefined,
+      toStatus: YardVehicleStatus.AWAITING_ARRIVAL,
+      performedBy: userId,
+      source: 'LEAD_CLOSED',
+      notes: 'Auto-created when deal closed',
+    });
+
+    return created;
+  }
+
   async ensureYardEntriesForInvoice(
     invoiceId: string,
     authenticatedUser: AuthenticatedUser,
@@ -131,6 +190,11 @@ export class YardService implements OnModuleInit {
 
     const sourceType = this.resolveSourceType(invoice);
 
+    const leadId = invoice.leadId?.toString();
+    const existingLeadYard = leadId
+      ? await this.yardVehicleRepository.findByLeadId(orgId, leadId)
+      : null;
+
     for (const vehicle of vehicles) {
       const vehicleInvoiceId = vehicle._id.toString();
       const existsByInvoice =
@@ -138,6 +202,18 @@ export class YardService implements OnModuleInit {
           vehicleInvoiceId,
         );
       if (existsByInvoice) continue;
+
+      if (existingLeadYard && !existingLeadYard.vehicleInvoiceId) {
+        await this.yardVehicleRepository.updateById(
+          existingLeadYard._id.toString(),
+          {
+            vehicleInvoiceId: vehicle._id,
+            invoiceId: new Types.ObjectId(validInvoiceId),
+            updatedBy: userId,
+          },
+        );
+        continue;
+      }
 
       const auctionVehicleId = (
         vehicle as { auctionVehicleId?: Types.ObjectId }
@@ -306,7 +382,11 @@ export class YardService implements OnModuleInit {
     }
   }
 
-  private async getYardVehicleForOrg(id: string, orgId: string) {
+  private async getYardVehicleForOrg(
+    id: string,
+    authenticatedUser: AuthenticatedUser,
+  ) {
+    const orgId = this.getOrgId(authenticatedUser);
     const yardVehicle = await this.yardVehicleRepository.findById(id, [
       { path: 'currentZoneId', select: 'name code' },
       { path: 'invoiceId', select: 'invoiceNumber sellerName' },
@@ -314,10 +394,75 @@ export class YardService implements OnModuleInit {
     if (!yardVehicle) {
       throw new NotFoundException('Yard vehicle not found');
     }
-    if (yardVehicle.organizationId?.toString() !== orgId) {
-      throw new BadRequestException('Yard vehicle does not belong to organization');
+    if (!sameOrganization(yardVehicle.organizationId, orgId)) {
+      throw new NotFoundException('Yard vehicle not found');
     }
+    await this.assertStaffCanAccessYardVehicle(yardVehicle, authenticatedUser);
     return yardVehicle;
+  }
+
+  private async staffYardListFilter(authenticatedUser: AuthenticatedUser) {
+    if (!isStaffUser(authenticatedUser)) {
+      return null;
+    }
+    const orgId = this.getOrgId(authenticatedUser);
+    const leadIds = await this.leadService.getOwnedLeadIds(authenticatedUser);
+    const invoiceIds = await this.invoiceRepository.findIds(
+      andMongoFilters(
+        {
+          organizationId: new Types.ObjectId(orgId),
+          isDeleted: { $ne: true },
+        },
+        staffInvoiceOwnerFilter(authenticatedUser, leadIds),
+      ),
+    );
+    const liftingYardIds =
+      await this.liftingService.findAssignedYardVehicleIds(authenticatedUser);
+    return staffYardOwnerFilter(
+      authenticatedUser,
+      leadIds,
+      invoiceIds,
+      liftingYardIds,
+    );
+  }
+
+  private async assertStaffCanAccessYardVehicle(
+    yardVehicle: {
+      _id?: unknown;
+      createdBy?: unknown;
+      leadId?: unknown;
+      invoiceId?: unknown;
+    },
+    authenticatedUser: AuthenticatedUser,
+  ) {
+    if (!isStaffUser(authenticatedUser)) {
+      return;
+    }
+    if (extractIdString(yardVehicle.createdBy) === authenticatedUser.userId) {
+      return;
+    }
+    const leadIds = await this.leadService.getOwnedLeadIds(authenticatedUser);
+    const leadId = extractIdString(yardVehicle.leadId);
+    if (leadId && leadIds.some((id) => id.toString() === leadId)) {
+      return;
+    }
+    const invoiceId = extractIdString(yardVehicle.invoiceId);
+    if (invoiceId) {
+      const invoice = await this.invoiceRepository.findById(invoiceId);
+      const owned = new Set(leadIds.map((id) => id.toString()));
+      if (invoice && staffOwnsInvoiceRecord(invoice, authenticatedUser, owned)) {
+        return;
+      }
+    }
+    const yardId = extractIdString(yardVehicle._id);
+    if (yardId) {
+      const liftingYardIds =
+        await this.liftingService.findAssignedYardVehicleIds(authenticatedUser);
+      if (liftingYardIds.some((id) => id.toString() === yardId)) {
+        return;
+      }
+    }
+    throw new NotFoundException('Yard vehicle not found');
   }
 
   async findAll(
@@ -326,26 +471,35 @@ export class YardService implements OnModuleInit {
   ): Promise<PaginatedResponse<unknown>> {
     const orgId = this.getOrgId(authenticatedUser);
     const { page, limit } = getPagination(query.page, query.limit);
-    const filter: Record<string, unknown> = {
-      organizationId: new Types.ObjectId(orgId),
-    };
-    if (query.status) filter.currentStatus = query.status;
-    if (query.invoiceId) {
-      filter.invoiceId = new Types.ObjectId(
-        validateObjectId(query.invoiceId, 'Invoice ID'),
-      );
-    }
-    if (query.zoneId) {
-      filter.currentZoneId = new Types.ObjectId(
-        validateObjectId(query.zoneId, 'Zone ID'),
-      );
-    }
-    if (query.registrationNumber?.trim()) {
-      filter.registrationNumber = {
-        $regex: query.registrationNumber.trim(),
-        $options: 'i',
-      };
-    }
+    const filter = andMongoFilters(
+      {
+        organizationId: new Types.ObjectId(orgId),
+        ...(query.status ? { currentStatus: query.status } : {}),
+        ...(query.invoiceId
+          ? {
+              invoiceId: new Types.ObjectId(
+                validateObjectId(query.invoiceId, 'Invoice ID'),
+              ),
+            }
+          : {}),
+        ...(query.zoneId
+          ? {
+              currentZoneId: new Types.ObjectId(
+                validateObjectId(query.zoneId, 'Zone ID'),
+              ),
+            }
+          : {}),
+        ...(query.registrationNumber?.trim()
+          ? {
+              registrationNumber: {
+                $regex: query.registrationNumber.trim(),
+                $options: 'i',
+              },
+            }
+          : {}),
+      },
+      await this.staffYardListFilter(authenticatedUser),
+    );
 
     const { data, total } = await this.yardVehicleRepository.findPaginated(
       filter,
@@ -367,8 +521,10 @@ export class YardService implements OnModuleInit {
   }
 
   async findOne(id: string, authenticatedUser: AuthenticatedUser) {
-    const orgId = this.getOrgId(authenticatedUser);
-    return this.getYardVehicleForOrg(validateObjectId(id, 'Yard vehicle ID'), orgId);
+    return this.getYardVehicleForOrg(
+      validateObjectId(id, 'Yard vehicle ID'),
+      authenticatedUser,
+    );
   }
 
   async findByVehicleInvoiceId(
@@ -383,19 +539,19 @@ export class YardService implements OnModuleInit {
     if (!yardVehicle) {
       return null;
     }
-    if (yardVehicle.organizationId?.toString() !== orgId) {
-      throw new BadRequestException('Yard vehicle does not belong to organization');
+    if (!sameOrganization(yardVehicle.organizationId, orgId)) {
+      throw new NotFoundException('Yard vehicle not found');
     }
+    await this.assertStaffCanAccessYardVehicle(yardVehicle, authenticatedUser);
     return this.yardVehicleRepository.findById(yardVehicle._id.toString(), [
       { path: 'currentZoneId', select: 'name code' },
     ]);
   }
 
   async getMovements(yardVehicleId: string, authenticatedUser: AuthenticatedUser) {
-    const orgId = this.getOrgId(authenticatedUser);
     const yardVehicle = await this.getYardVehicleForOrg(
       validateObjectId(yardVehicleId, 'Yard vehicle ID'),
-      orgId,
+      authenticatedUser,
     );
     return this.yardMovementRepository.findByYardVehicleId(
       yardVehicle._id.toString(),
@@ -412,7 +568,7 @@ export class YardService implements OnModuleInit {
     const sanitized = sanitizeObject(dto) as UpdateYardVehicleStatusDto;
     const yardVehicle = await this.getYardVehicleForOrg(
       validateObjectId(id, 'Yard vehicle ID'),
-      orgId,
+      authenticatedUser,
     );
 
     const fromStatus = yardVehicle.currentStatus;
@@ -422,7 +578,9 @@ export class YardService implements OnModuleInit {
       fromStatus === toStatus &&
       !sanitized.zoneId &&
       !sanitized.slot &&
-      sanitized.grossWeightKg === undefined
+      sanitized.grossWeightKg === undefined &&
+      !sanitized.arrivedAt &&
+      sanitized.codNumber === undefined
     ) {
       return yardVehicle;
     }
@@ -455,6 +613,12 @@ export class YardService implements OnModuleInit {
     if (sanitized.grossWeightKg !== undefined) {
       updateData.grossWeightKg = sanitized.grossWeightKg;
     }
+    if (sanitized.arrivedAt) {
+      updateData.arrivedAt = new Date(sanitized.arrivedAt);
+    }
+    if (sanitized.codNumber !== undefined) {
+      updateData.codNumber = sanitized.codNumber?.trim() || undefined;
+    }
 
     const now = new Date();
     if (fromStatus !== toStatus) {
@@ -472,6 +636,15 @@ export class YardService implements OnModuleInit {
       await this.vehicleInvoiceRepository.updateById(
         yardVehicle.vehicleInvoiceId.toString(),
         { grossWeightKg: sanitized.grossWeightKg },
+      );
+    }
+
+    if (
+      toStatus === YardVehicleStatus.GATE_IN ||
+      toStatus === YardVehicleStatus.PARKED
+    ) {
+      await this.liftingService.completeByYardVehicleId(
+        yardVehicle._id.toString(),
       );
     }
 
@@ -518,9 +691,10 @@ export class YardService implements OnModuleInit {
         'No yard record for this vehicle. Confirm invoice or run yard backfill.',
       );
     }
-    if (yardVehicle.organizationId?.toString() !== orgId) {
-      throw new BadRequestException('Yard vehicle does not belong to organization');
+    if (!sameOrganization(yardVehicle.organizationId, orgId)) {
+      throw new NotFoundException('Yard vehicle not found');
     }
+    await this.assertStaffCanAccessYardVehicle(yardVehicle, authenticatedUser);
 
     const fromStatus = yardVehicle.currentStatus;
     const toStatus = YardVehicleStatus.DISMANTLING_IN_PROGRESS;
@@ -594,9 +768,10 @@ export class YardService implements OnModuleInit {
     );
     if (!yardVehicle) return;
 
-    if (yardVehicle.organizationId?.toString() !== orgId) {
-      throw new BadRequestException('Yard vehicle does not belong to organization');
+    if (!sameOrganization(yardVehicle.organizationId, orgId)) {
+      throw new NotFoundException('Yard vehicle not found');
     }
+    await this.assertStaffCanAccessYardVehicle(yardVehicle, authenticatedUser);
 
     const vehicleDoc = await this.vehicleInvoiceRepository.findById(
       validVehicleInvoiceId,

@@ -6,4 +6,5 @@ export interface AuthenticatedUser {
   orgId: string | null;
   email: string;
   name: string;
+  allowedModules: string[];
 }

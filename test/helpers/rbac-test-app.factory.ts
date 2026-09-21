@@ -8,6 +8,7 @@ import { Reflector } from '@nestjs/core';
 import { Test } from '@nestjs/testing';
 import { jwtAuthGuard } from '../../src/common/guards/jwt-auth.guard';
 import { RolesGuard } from '../../src/common/guards/roles.guard';
+import { ModulesGuard } from '../../src/common/guards/modules.guard';
 import { MockAuthGuard } from './mock-auth.guard';
 
 export async function createRbacTestApp(
@@ -16,7 +17,7 @@ export async function createRbacTestApp(
 ): Promise<INestApplication> {
   const moduleRef = await Test.createTestingModule({
     controllers,
-    providers: [...providers, Reflector, RolesGuard],
+    providers: [...providers, Reflector, RolesGuard, ModulesGuard],
   })
     .overrideGuard(jwtAuthGuard)
     .useClass(MockAuthGuard)
