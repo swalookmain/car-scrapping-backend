@@ -7,8 +7,11 @@ import {
   MaxLength,
   IsEnum,
   IsBoolean,
+  IsArray,
+  IsIn,
 } from 'class-validator';
 import { Role } from 'src/common/enum/role.enum';
+import { STAFF_ASSIGNABLE_MODULE_IDS } from 'src/common/access/app-modules';
 
 export class CreateStaffDto {
   @ApiProperty()
@@ -41,4 +44,10 @@ export class CreateStaffDto {
   @IsBoolean()
   @IsOptional()
   isActive?: boolean;
+
+  @ApiPropertyOptional({ type: [String] })
+  @IsOptional()
+  @IsArray()
+  @IsIn(STAFF_ASSIGNABLE_MODULE_IDS, { each: true })
+  allowedModules?: string[];
 }

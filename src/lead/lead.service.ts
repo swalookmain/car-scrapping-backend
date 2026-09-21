@@ -4,6 +4,7 @@ import {
   Inject,
   Injectable,
   NotFoundException,
+  forwardRef,
 } from '@nestjs/common';
 import type { LoggerService } from '@nestjs/common';
 import { WINSTON_MODULE_NEST_PROVIDER } from 'nest-winston';
@@ -27,12 +28,21 @@ import { LeadStatus } from 'src/common/enum/leadStatus.enum';
 import { LeadSource } from 'src/common/enum/leadSource.enum';
 import { Role } from 'src/common/enum/role.enum';
 import { StorageService, UploadFile } from 'src/common/services/storage.service';
+import { YardService } from 'src/yard/yard.service';
+import { LiftingService } from 'src/lifting/lifting.service';
 import {
   LeadDocumentRecordDocument,
   LeadDocumentPageSide,
   LeadDocumentType,
 } from './lead-document.schema';
 import type { LeadDocument } from './lead.schema';
+import {
+  andMongoFilters,
+  staffLeadOwnerFilter,
+  staffOwnsLeadRecord,
+} from 'src/common/access/data-scope';
+import { APP_MODULES, sanitizeStaffModules } from 'src/common/access/app-modules';
+import { getLeadWizardProgress } from './lead-wizard.util';
 
 @Injectable()
 export class LeadService {
@@ -42,6 +52,9 @@ export class LeadService {
     private readonly usersRepository: UsersRepository,
     private readonly organizationsService: OrganizationsService,
     private readonly storageService: StorageService,
+    @Inject(forwardRef(() => YardService))
+    private readonly yardService: YardService,
+    private readonly liftingService: LiftingService,
     @Inject(WINSTON_MODULE_NEST_PROVIDER)
     private readonly logger: LoggerService,
   ) {}
@@ -90,32 +103,36 @@ export class LeadService {
   async getLeads(query: QueryLeadsDto, authenticatedUser: AuthenticatedUser) {
     try {
       const orgId = this.getOrgId(authenticatedUser);
-      const filter: Record<string, unknown> = {
+      const base: Record<string, unknown> = {
         organizationId: new Types.ObjectId(orgId),
       };
 
-      if (authenticatedUser.role === Role.STAFF) {
-        filter.assignedTo = new Types.ObjectId(authenticatedUser.userId);
-      } else if (query.assignedTo) {
-        filter.assignedTo = new Types.ObjectId(
+      if (authenticatedUser.role !== Role.STAFF && query.assignedTo) {
+        base.assignedTo = new Types.ObjectId(
           validateObjectId(query.assignedTo, 'Assigned staff ID'),
         );
       }
-
       if (query.status) {
-        filter.status = query.status;
+        base.status = query.status;
       }
 
-      if (query.q?.trim()) {
-        const pattern = new RegExp(query.q.trim(), 'i');
-        filter.$or = [
-          { name: pattern },
-          { ownerName: pattern },
-          { vehicleName: pattern },
-          { mobileNumber: pattern },
-          { location: pattern },
-        ];
-      }
+      const search = query.q?.trim()
+        ? {
+            $or: [
+              { name: new RegExp(query.q.trim(), 'i') },
+              { ownerName: new RegExp(query.q.trim(), 'i') },
+              { vehicleName: new RegExp(query.q.trim(), 'i') },
+              { mobileNumber: new RegExp(query.q.trim(), 'i') },
+              { location: new RegExp(query.q.trim(), 'i') },
+            ],
+          }
+        : null;
+
+      const filter = andMongoFilters(
+        base,
+        staffLeadOwnerFilter(authenticatedUser),
+        search,
+      );
 
       const { page, limit } = getPagination(
         query.page ? Number(query.page) : 1,
@@ -127,8 +144,21 @@ export class LeadService {
         limit,
       );
 
+      const leadIds = data.map((row) => String(row._id));
+      const docsByLead = await this.leadDocumentRepository.findTypesByLeadIds(
+        orgId,
+        leadIds,
+      );
+      const withWizard = data.map((row) => {
+        const docs = docsByLead.get(String(row._id)) || [];
+        return {
+          ...row,
+          ...getLeadWizardProgress(row, docs),
+        };
+      });
+
       return {
-        data,
+        data: withWizard,
         meta: {
           page,
           limit,
@@ -179,6 +209,17 @@ export class LeadService {
 
       delete sanitizedData.assignedTo;
 
+      this.assertOfferCompleteForLaterSteps(lead, sanitizedData);
+
+      const nextOffer =
+        sanitizedData.offerAmount ?? lead.offerAmount;
+      const nextCounter =
+        sanitizedData.counterAmount ?? lead.counterAmount;
+      const offerJustCompleted =
+        nextOffer != null &&
+        nextCounter != null &&
+        lead.status === LeadStatus.OPEN;
+
       const updatedLead = await this.leadRepository.updateById(leadId, {
         ...sanitizedData,
         ...(sanitizedData.isInterested === false
@@ -187,6 +228,7 @@ export class LeadService {
         ...(sanitizedData.isInterested === true && lead.status === LeadStatus.CANCELLED
           ? { status: LeadStatus.OPEN }
           : {}),
+        ...(offerJustCompleted ? { status: LeadStatus.IN_PROCESS } : {}),
         ...(sanitizedData.purchaseDate
           ? { purchaseDate: new Date(sanitizedData.purchaseDate) }
           : {}),
@@ -234,14 +276,15 @@ export class LeadService {
       const lead = await this.requireLead(leadId);
       this.ensureLeadAccessible(lead, authenticatedUser, 'status');
 
-      if (updateLeadStatusDto.status === LeadStatus.CLOSED) {
-        throw new BadRequestException(
-          'Lead can only be closed when the invoice is confirmed',
-        );
+      if (
+        lead.status === LeadStatus.CLOSED &&
+        updateLeadStatusDto.status !== LeadStatus.CLOSED
+      ) {
+        throw new BadRequestException('Closed leads cannot change status');
       }
 
-      if (lead.status === LeadStatus.CLOSED) {
-        throw new BadRequestException('Closed leads cannot change status');
+      if (updateLeadStatusDto.status === LeadStatus.CLOSED) {
+        return this.closeDeal(lead, updateLeadStatusDto, authenticatedUser);
       }
 
       return this.leadRepository.updateById(leadId, {
@@ -293,17 +336,40 @@ export class LeadService {
       vehicleLeft?: UploadFile[];
       vehicleBack?: UploadFile[];
       vehicleInterior?: UploadFile[];
+      cod?: UploadFile[];
     },
     authenticatedUser: AuthenticatedUser,
   ) {
     try {
-      this.ensureAdmin(authenticatedUser);
       const leadId = validateObjectId(id, 'Lead ID');
       const lead = await this.requireLead(leadId);
-      this.assertLeadMutable(lead);
+      this.ensureLeadAccessible(
+        lead,
+        authenticatedUser,
+        lead.status === LeadStatus.CLOSED ? 'status' : 'update',
+      );
+      const extraFiles = [
+        files.aadhaarFront?.[0],
+        files.aadhaarBack?.[0],
+        files.rcFront?.[0],
+        files.rcBack?.[0],
+        files.pan?.[0],
+        files.bankDetail?.[0],
+        files.vehicleFront?.[0],
+        files.vehicleRight?.[0],
+        files.vehicleEngine?.[0],
+        files.vehicleLeft?.[0],
+        files.vehicleBack?.[0],
+        files.vehicleInterior?.[0],
+      ].some(Boolean);
+      const hasCodOnly = Boolean(files.cod?.[0]) && !extraFiles;
+      if (!(lead.status === LeadStatus.CLOSED && hasCodOnly)) {
+        this.assertLeadMutable(lead);
+      }
 
       const orgId = this.getOrgId(authenticatedUser);
-      const { aadhaarPageMode, rcPageMode } = uploadLeadDocumentDto;
+      const aadhaarPageMode = uploadLeadDocumentDto.aadhaarPageMode || 'single';
+      const rcPageMode = uploadLeadDocumentDto.rcPageMode || 'single';
       const resolvedFiles: Array<{
         file: UploadFile;
         documentType: LeadDocumentType;
@@ -383,6 +449,13 @@ export class LeadService {
         'single',
         'single',
       );
+      this.pushLeadDocument(
+        resolvedFiles,
+        files.cod?.[0],
+        'cod',
+        'single',
+        'single',
+      );
 
       if (aadhaarPageMode === 'double') {
         if (files.aadhaarFront?.[0] && !files.aadhaarBack?.[0]) {
@@ -433,6 +506,14 @@ export class LeadService {
         }),
       );
 
+      const codDoc = saved.find((doc) => doc.documentType === 'cod');
+      if (codDoc) {
+        await this.leadRepository.updateById(leadId, {
+          codDocumentUrl: codDoc.url,
+          codStorageKey: codDoc.storageKey,
+        });
+      }
+
       return { message: 'Lead documents uploaded', documents: saved };
     } catch (error) {
       this.rethrowKnown(error);
@@ -455,21 +536,24 @@ export class LeadService {
     authenticatedUser: AuthenticatedUser,
   ) {
     const orgId = this.getOrgId(authenticatedUser);
-    const assignedUserId =
+    const ownerUserId =
       authenticatedUser.role === Role.STAFF ? authenticatedUser.userId : undefined;
     return this.leadRepository.findLookupCandidates(
       orgId,
       query.q,
-      assignedUserId,
+      ownerUserId,
     );
   }
 
   async getLeadLookupById(id: string, authenticatedUser: AuthenticatedUser) {
     const lead = await this.getLeadById(id, authenticatedUser);
-    if (lead.status === LeadStatus.CLOSED || lead.invoiceId) {
-      throw new BadRequestException('Lead is no longer available for invoicing');
+    if (lead.status !== LeadStatus.CLOSED) {
+      throw new BadRequestException('Only closed deals can be invoiced');
     }
-    if (lead.status === LeadStatus.CANCELLED || lead.isInterested === false) {
+    if (lead.invoiceId) {
+      throw new BadRequestException('Lead is already linked to an invoice');
+    }
+    if (lead.isInterested === false) {
       throw new BadRequestException('Lead is marked as not interested');
     }
     return lead;
@@ -483,10 +567,10 @@ export class LeadService {
     const lead = await this.requireLead(validLeadId);
     this.ensureLeadAccessible(lead, authenticatedUser, 'invoice');
 
-    if (lead.status === LeadStatus.CLOSED) {
-      throw new BadRequestException('Closed leads cannot be linked to invoices');
+    if (lead.status !== LeadStatus.CLOSED) {
+      throw new BadRequestException('Invoice can only be created after the deal is closed');
     }
-    if (lead.status === LeadStatus.CANCELLED || lead.isInterested === false) {
+    if (lead.isInterested === false) {
       throw new BadRequestException('Not interested leads cannot be linked to invoices');
     }
     if (lead.invoiceId) {
@@ -505,29 +589,6 @@ export class LeadService {
     await this.leadRepository.updateById(lead._id.toString(), {
       invoiceId: new Types.ObjectId(validateObjectId(invoiceId, 'Invoice ID')),
       updatedBy: new Types.ObjectId(authenticatedUser.userId),
-      ...(lead.status === LeadStatus.OPEN
-        ? { status: LeadStatus.IN_PROCESS }
-        : {}),
-    });
-  }
-
-  async closeLeadForInvoice(
-    leadId: string,
-    invoiceId: string,
-    authenticatedUser: AuthenticatedUser,
-  ) {
-    const lead = await this.requireLead(leadId);
-    const orgId = this.getOrgId(authenticatedUser);
-    if (lead.organizationId?.toString() !== orgId) {
-      throw new ForbiddenException('Lead does not belong to organization');
-    }
-
-    await this.leadRepository.updateById(lead._id.toString(), {
-      status: LeadStatus.CLOSED,
-      invoiceId: new Types.ObjectId(invoiceId),
-      closedAt: new Date(),
-      closedBy: new Types.ObjectId(authenticatedUser.userId),
-      updatedBy: new Types.ObjectId(authenticatedUser.userId),
     });
   }
 
@@ -536,6 +597,107 @@ export class LeadService {
     orgId: string,
   ): Promise<LeadDocumentRecordDocument[]> {
     return this.leadDocumentRepository.findByLeadAndOrg(leadId, orgId);
+  }
+
+  private hasOfferAmounts(lead: {
+    offerAmount?: number;
+    counterAmount?: number;
+  }) {
+    return lead.offerAmount != null && lead.counterAmount != null;
+  }
+
+  private assertOfferCompleteForLaterSteps(
+    lead: { offerAmount?: number; counterAmount?: number },
+    incoming: UpdateLeadDto,
+  ) {
+    const nextOffer = incoming.offerAmount ?? lead.offerAmount;
+    const nextCounter = incoming.counterAmount ?? lead.counterAmount;
+    const laterKeys: Array<keyof UpdateLeadDto> = [
+      'aadhaarNumber',
+      'aadhaarLinkedMobileNumber',
+      'panNumber',
+      'bankAccountNumber',
+      'bankIfscCode',
+      'bankBranchName',
+      'bankName',
+      'email',
+    ];
+    const touchesLater = laterKeys.some((key) => incoming[key] !== undefined);
+    if (touchesLater && (nextOffer == null || nextCounter == null)) {
+      throw new BadRequestException(
+        'Offer amount and counter amount are required before KYC',
+      );
+    }
+  }
+
+  private async closeDeal(
+    lead: LeadDocument,
+    dto: UpdateLeadStatusDto,
+    authenticatedUser: AuthenticatedUser,
+  ) {
+    if (!this.hasOfferAmounts(lead)) {
+      throw new BadRequestException(
+        'Offer and counter amounts are required before closing the deal',
+      );
+    }
+
+    const orgId = this.getOrgId(authenticatedUser);
+    let liftingStaffId: string | undefined;
+    let liftingStaffName: string | undefined;
+    if (dto.liftingStaffId) {
+      liftingStaffId = await this.assertLiftingStaff(
+        dto.liftingStaffId,
+        orgId,
+      );
+      const staff = await this.usersRepository.findById(liftingStaffId);
+      liftingStaffName = staff?.name;
+    }
+
+    const expectedArrivalAt = dto.expectedArrivalAt
+      ? new Date(dto.expectedArrivalAt)
+      : lead.expectedArrivalAt;
+
+    const updated = await this.leadRepository.updateById(lead._id.toString(), {
+      status: LeadStatus.CLOSED,
+      closedAt: lead.closedAt || new Date(),
+      closedBy: lead.closedBy || new Types.ObjectId(authenticatedUser.userId),
+      updatedBy: new Types.ObjectId(authenticatedUser.userId),
+      ...(dto.closingAmount != null ? { closingAmount: dto.closingAmount } : {}),
+      ...(dto.codNumber ? { codNumber: dto.codNumber.trim() } : {}),
+      ...(dto.codInwardNumber
+        ? { codInwardNumber: dto.codInwardNumber.trim() }
+        : {}),
+      ...(liftingStaffId
+        ? { liftingStaffId: new Types.ObjectId(liftingStaffId) }
+        : {}),
+      ...(expectedArrivalAt ? { expectedArrivalAt } : {}),
+    });
+
+    const yardVehicle = await this.yardService.ensureYardEntryForLead(
+      updated || lead,
+      authenticatedUser,
+    );
+
+    await this.liftingService.createForClosedLead({
+      organizationId: orgId,
+      leadId: lead._id.toString(),
+      yardVehicleId: yardVehicle?._id?.toString(),
+      assignedTo: liftingStaffId || lead.liftingStaffId?.toString(),
+      expectedArrivalAt,
+      createdBy: authenticatedUser.userId,
+      snapshot: {
+        leadName: lead.name,
+        ownerName: lead.ownerName,
+        registrationNumber: lead.registrationNumber,
+        vehicleName: lead.vehicleName,
+        variant: lead.variant,
+        closingAmount: dto.closingAmount ?? lead.closingAmount,
+        codNumber: dto.codNumber || lead.codNumber,
+        assignedStaffName: liftingStaffName,
+      },
+    });
+
+    return updated;
   }
 
   private async requireLead(leadId: string) {
@@ -561,8 +723,10 @@ export class LeadService {
       return;
     }
 
-    const assignedTo = this.extractObjectIdString(lead.assignedTo);
-    if (authenticatedUser.role === Role.STAFF && assignedTo === authenticatedUser.userId) {
+    if (
+      authenticatedUser.role === Role.STAFF &&
+      staffOwnsLeadRecord(lead, authenticatedUser)
+    ) {
       if (mode === 'update' && lead.status === LeadStatus.CLOSED) {
         throw new BadRequestException('Closed leads cannot be updated');
       }
@@ -593,6 +757,18 @@ export class LeadService {
       );
     }
 
+    return userId;
+  }
+
+  private async assertLiftingStaff(staffId: string, orgId: string) {
+    const userId = await this.assertAssignableStaff(staffId, orgId);
+    const staff = await this.usersRepository.findById(userId);
+    const modules = sanitizeStaffModules(staff?.allowedModules);
+    if (!modules.includes(APP_MODULES.LIFTING.id)) {
+      throw new BadRequestException(
+        'Lifting can only be assigned to staff with the lifting module',
+      );
+    }
     return userId;
   }
 
@@ -652,6 +828,16 @@ export class LeadService {
 
   private async assertOrganization(orgId: string) {
     await this.organizationsService.getById(orgId);
+  }
+
+  async getOwnedLeadIds(authenticatedUser: AuthenticatedUser) {
+    if (authenticatedUser.role !== Role.STAFF) {
+      return [] as Types.ObjectId[];
+    }
+    return this.leadRepository.findOwnedLeadIds(
+      this.getOrgId(authenticatedUser),
+      authenticatedUser.userId,
+    );
   }
 
   private getOrgId(authenticatedUser: AuthenticatedUser) {

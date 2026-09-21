@@ -6,10 +6,12 @@ import { AuthController } from '../../src/auth/auth.controller';
 import { AuthService } from '../../src/auth/auth.service';
 import { UsersController } from '../../src/users/users.controller';
 import { UsersService } from '../../src/users/users.service';
+import { AccessController } from '../../src/common/access/access.controller';
 import { OrganizationsController } from '../../src/organizations/organizations.controller';
 import { OrganizationsService } from '../../src/organizations/organizations.service';
 import { SubscriptionService } from '../../src/subscription/subscription.service';
 import { OrganizationLetterSettingsService } from '../../src/organizations/organization-letter-settings.service';
+import { OrganizationFacilitySettingsService } from '../../src/organizations/organization-facility-settings.service';
 import { AuditLogController } from '../../src/audit-log/audit-log.controller';
 import { AuditLogService } from '../../src/audit-log/audit-log.service';
 import { DashboardController } from '../../src/dashboard/dashboard.controller';
@@ -18,6 +20,8 @@ import { PartCatalogController } from '../../src/part-catalog/part-catalog.contr
 import { PartCatalogService } from '../../src/part-catalog/part-catalog.service';
 import { YardController } from '../../src/yard/yard.controller';
 import { YardService } from '../../src/yard/yard.service';
+import { LiftingController } from '../../src/lifting/lifting.controller';
+import { LiftingService } from '../../src/lifting/lifting.service';
 import { VehicleComplianceController } from '../../src/vehicle-compliance/vehicle-compliance.controller';
 import { VehicleComplianceService } from '../../src/vehicle-compliance/vehicle-compliance.service';
 import { TaxComplianceController } from '../../src/tax-compliance/tax-compliance.controller';
@@ -68,12 +72,17 @@ export const RBAC_MODULE_SETUPS: Record<string, RbacModuleSetup> = {
     controllers: [UsersController],
     providers: [svc(UsersService)],
   },
+  Access: {
+    controllers: [AccessController],
+    providers: [],
+  },
   Organizations: {
     controllers: [OrganizationsController],
     providers: [
       svc(OrganizationsService),
       svc(SubscriptionService),
       svc(OrganizationLetterSettingsService),
+      svc(OrganizationFacilitySettingsService),
     ],
   },
   AuditLog: {
@@ -91,6 +100,10 @@ export const RBAC_MODULE_SETUPS: Record<string, RbacModuleSetup> = {
   Yard: {
     controllers: [YardController],
     providers: [svc(YardService)],
+  },
+  Lifting: {
+    controllers: [LiftingController],
+    providers: [svc(LiftingService)],
   },
   VehicleCompliance: {
     controllers: [VehicleComplianceController],

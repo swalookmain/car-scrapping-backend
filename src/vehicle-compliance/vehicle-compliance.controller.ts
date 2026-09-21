@@ -19,17 +19,21 @@ import { GetUser } from 'src/common/decorators/user.decorator';
 import { Roles } from 'src/common/decorators/roles.decorators';
 import { jwtAuthGuard } from 'src/common/guards/jwt-auth.guard';
 import { RolesGuard } from 'src/common/guards/roles.guard';
+import { ModulesGuard } from 'src/common/guards/modules.guard';
 import type { AuthenticatedUser } from 'src/common/interface/authenticated-user.interface';
 import { Role } from 'src/common/enum/role.enum';
 import { CreateVehicleCodRecordDto } from './dto/create-vehicle-cod-record.dto';
 import { UpdateVehicleCodTrackingDto } from './dto/update-vehicle-cod-tracking.dto';
 import { VehicleComplianceService } from './vehicle-compliance.service';
 import { QueryVehicleCodRecordDto } from './dto/query-vehicle-cod-record.dto';
+import { SetModule } from 'src/common/decorators/set-module.decorator';
+import { APP_MODULES } from 'src/common/access/app-modules';
 
 @ApiTags('Vehicle Compliance')
 @ApiBearerAuth()
 @Controller('vehicle-compliance')
-@UseGuards(jwtAuthGuard, RolesGuard)
+@UseGuards(jwtAuthGuard, RolesGuard, ModulesGuard)
+@SetModule(APP_MODULES.COMPLIANCE.id)
 export class VehicleComplianceController {
   constructor(
     private readonly vehicleComplianceService: VehicleComplianceService,

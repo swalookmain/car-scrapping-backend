@@ -22,6 +22,7 @@ import { FileFieldsInterceptor } from '@nestjs/platform-express';
 import type { Express } from 'express';
 import { jwtAuthGuard } from 'src/common/guards/jwt-auth.guard';
 import { RolesGuard } from 'src/common/guards/roles.guard';
+import { ModulesGuard } from 'src/common/guards/modules.guard';
 import { Roles } from 'src/common/decorators/roles.decorators';
 import { Role } from 'src/common/enum/role.enum';
 import { LeadService } from './lead.service';
@@ -35,13 +36,14 @@ import { GetUser } from 'src/common/decorators/user.decorator';
 import type { AuthenticatedUser } from 'src/common/interface/authenticated-user.interface';
 import { UploadLeadDocumentDto } from './dto/upload-lead-document.dto';
 import { DOCUMENT_UPLOAD_OPTIONS } from 'src/common/utils/document-upload.util';
-
-
+import { SetModule } from 'src/common/decorators/set-module.decorator';
+import { APP_MODULES } from 'src/common/access/app-modules';
 
 @ApiTags('Leads')
 @ApiBearerAuth()
 @Controller('leads')
-@UseGuards(jwtAuthGuard, RolesGuard)
+@UseGuards(jwtAuthGuard, RolesGuard, ModulesGuard)
+@SetModule(APP_MODULES.LEADS.id)
 export class LeadController {
   constructor(private readonly leadService: LeadService) {}
 
@@ -67,7 +69,7 @@ export class LeadController {
 
   @Get('lookup')
   @Roles(Role.ADMIN, Role.STAFF)
-  @ApiOperation({ summary: 'Search open leads for invoice prefill' })
+  @ApiOperation({ summary: 'Search closed deals without an invoice' })
   searchLeadLookup(
     @Query() query: LeadLookupQueryDto,
     @GetUser() authenticatedUser: AuthenticatedUser,
@@ -96,8 +98,8 @@ export class LeadController {
   }
 
   @Post(':id/documents')
-  @Roles(Role.ADMIN)
-  @ApiOperation({ summary: 'Upload or replace lead documents' })
+  @Roles(Role.ADMIN, Role.STAFF)
+  @ApiOperation({ summary: 'Upload lead documents including optional COD file' })
   @ApiConsumes('multipart/form-data')
   @ApiBody({
     schema: {
@@ -117,8 +119,8 @@ export class LeadController {
         vehicleLeft: { type: 'string', format: 'binary' },
         vehicleBack: { type: 'string', format: 'binary' },
         vehicleInterior: { type: 'string', format: 'binary' },
+        cod: { type: 'string', format: 'binary' },
       },
-      required: ['aadhaarPageMode', 'rcPageMode'],
     },
   })
   @UseInterceptors(
@@ -136,6 +138,7 @@ export class LeadController {
         { name: 'vehicleLeft', maxCount: 1 },
         { name: 'vehicleBack', maxCount: 1 },
         { name: 'vehicleInterior', maxCount: 1 },
+        { name: 'cod', maxCount: 1 },
       ],
       DOCUMENT_UPLOAD_OPTIONS,
     ),
@@ -157,6 +160,7 @@ export class LeadController {
       vehicleLeft?: Express.Multer.File[];
       vehicleBack?: Express.Multer.File[];
       vehicleInterior?: Express.Multer.File[];
+      cod?: Express.Multer.File[];
     },
     @GetUser() authenticatedUser: AuthenticatedUser,
   ) {
@@ -202,7 +206,7 @@ export class LeadController {
 
   @Patch(':id/status')
   @Roles(Role.ADMIN, Role.STAFF)
-  @ApiOperation({ summary: 'Update lead working status' })
+  @ApiOperation({ summary: 'Update lead status or close the deal' })
   updateLeadStatus(
     @Param('id') id: string,
     @Body() updateLeadStatusDto: UpdateLeadStatusDto,

@@ -18,11 +18,15 @@ function send(
   method: HttpMethod,
   path: string,
   role?: Role | 'none',
+  modules?: string,
 ) {
   const agent = request(app.getHttpServer());
   let req = agent[method](path);
   if (role) {
     req = req.set('x-test-role', role);
+  }
+  if (modules !== undefined) {
+    req = req.set('x-test-modules', modules);
   }
   return req;
 }
@@ -133,5 +137,87 @@ describe('RBAC cross-cutting rules', () => {
       expect(res.status).not.toBe(403);
     }
     await app.close();
+  });
+});
+
+describe('Staff module allow-list', () => {
+  it('STAFF with yard can access yard and is forbidden on inventory', async () => {
+    const yardApp = await createRbacTestApp(
+      RBAC_MODULE_SETUPS.Yard.controllers,
+      RBAC_MODULE_SETUPS.Yard.providers,
+    );
+    const yardRes = await send(
+      yardApp,
+      'get',
+      '/yard/vehicles',
+      Role.STAFF,
+      'yard',
+    );
+    expect(yardRes.status).not.toBe(401);
+    expect(yardRes.status).not.toBe(403);
+    await yardApp.close();
+
+    const invApp = await createRbacTestApp(
+      RBAC_MODULE_SETUPS.Inventory.controllers,
+      RBAC_MODULE_SETUPS.Inventory.providers,
+    );
+    const invRes = await send(invApp, 'get', '/inventory', Role.STAFF, 'yard');
+    expect(invRes.status).toBe(403);
+    await invApp.close();
+  });
+
+  it('STAFF without lifting is forbidden; with lifting can list jobs', async () => {
+    const deniedApp = await createRbacTestApp(
+      RBAC_MODULE_SETUPS.Lifting.controllers,
+      RBAC_MODULE_SETUPS.Lifting.providers,
+    );
+    const denied = await send(deniedApp, 'get', '/lifting', Role.STAFF, 'yard');
+    expect(denied.status).toBe(403);
+    await deniedApp.close();
+
+    const allowedApp = await createRbacTestApp(
+      RBAC_MODULE_SETUPS.Lifting.controllers,
+      RBAC_MODULE_SETUPS.Lifting.providers,
+    );
+    const allowed = await send(
+      allowedApp,
+      'get',
+      '/lifting',
+      Role.STAFF,
+      'lifting',
+    );
+    expect(allowed.status).not.toBe(401);
+    expect(allowed.status).not.toBe(403);
+    await allowedApp.close();
+  });
+
+  it('STAFF with no modules is forbidden on staff APIs', async () => {
+    const app = await createRbacTestApp(
+      RBAC_MODULE_SETUPS.Dashboard.controllers,
+      RBAC_MODULE_SETUPS.Dashboard.providers,
+    );
+    const res = await send(app, 'get', '/dashboard/overview', Role.STAFF, 'none');
+    expect(res.status).toBe(403);
+    await app.close();
+  });
+
+  it('STAFF with leads can list org staff for assignment; yard-only cannot', async () => {
+    const path = `/users/find-all-staff-by-organization/${'507f1f77bcf86cd799439012'}`;
+    const allowedApp = await createRbacTestApp(
+      RBAC_MODULE_SETUPS.Users.controllers,
+      RBAC_MODULE_SETUPS.Users.providers,
+    );
+    const allowed = await send(allowedApp, 'get', path, Role.STAFF, 'leads');
+    expect(allowed.status).not.toBe(401);
+    expect(allowed.status).not.toBe(403);
+    await allowedApp.close();
+
+    const deniedApp = await createRbacTestApp(
+      RBAC_MODULE_SETUPS.Users.controllers,
+      RBAC_MODULE_SETUPS.Users.providers,
+    );
+    const denied = await send(deniedApp, 'get', path, Role.STAFF, 'yard');
+    expect(denied.status).toBe(403);
+    await deniedApp.close();
   });
 });

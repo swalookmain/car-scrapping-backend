@@ -136,6 +136,11 @@ export class InvoiceRepository extends BaseRepository<InvoiceDocument> {
     };
   }
 
+  async findIds(filter: Record<string, unknown>): Promise<Types.ObjectId[]> {
+    const rows = await this.model.find(filter).select('_id').lean().exec();
+    return rows.map((row) => row._id as Types.ObjectId);
+  }
+
   async updateManyByFilter(
     filter: Record<string, unknown>,
     update: Record<string, unknown>,

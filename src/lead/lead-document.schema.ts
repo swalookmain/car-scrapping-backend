@@ -12,7 +12,8 @@ export type LeadDocumentType =
   | 'vehicleEngine'
   | 'vehicleLeft'
   | 'vehicleBack'
-  | 'vehicleInterior';
+  | 'vehicleInterior'
+  | 'cod';
 export type LeadDocumentPageMode = 'single' | 'double';
 export type LeadDocumentPageSide = 'single' | 'front' | 'back';
 export type LeadStorageProvider = 'cloudinary' | 's3';
@@ -41,6 +42,7 @@ export class LeadDocumentRecord extends Document {
       'vehicleLeft',
       'vehicleBack',
       'vehicleInterior',
+      'cod',
     ],
   })
   documentType: LeadDocumentType;

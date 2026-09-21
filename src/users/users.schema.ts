@@ -16,6 +16,9 @@ export class User {
   @Prop({ type: String, enum: Role, required: true })
   role: Role;
 
+  @Prop({ type: [String], default: [] })
+  allowedModules: string[];
+
   @Prop({ default: '' })
   phoneNumber: string;
 

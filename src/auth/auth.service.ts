@@ -22,6 +22,8 @@ import { SubscriptionService } from '../subscription/subscription.service';
 import { SubscriptionType } from '../subscription/enum/subscription-type.enum';
 import { SubscriptionCreatedBy } from '../subscription/enum/subscription-created-by.enum';
 import { hashPassword } from '../common/utils/password.util';
+import { meModulesForRole, tokenModulesForRole } from 'src/common/access/app-modules';
+import type { AuthenticatedUser } from 'src/common/interface/authenticated-user.interface';
 
 @Injectable()
 export class AuthService {
@@ -108,6 +110,7 @@ export class AuthService {
         role: user.role,
         orgId: user.organizationId?.toString() || null,
         name: user.name,
+        allowedModules: tokenModulesForRole(user.role, user.allowedModules),
       };
 
       const accessToken = this.jwtService.sign(payload, {
@@ -196,6 +199,7 @@ export class AuthService {
       role: Role;
       organizationId: unknown;
       name: string;
+      allowedModules?: string[];
     } | null = null;
 
     try {
@@ -236,6 +240,7 @@ export class AuthService {
         role: user.role,
         orgId,
         name: user.name,
+        allowedModules: tokenModulesForRole(user.role, user.allowedModules),
       };
 
       const accessToken = this.jwtService.sign(payload, {
@@ -351,6 +356,10 @@ export class AuthService {
         role: user.role,
         orgId: user.organizationId?.toString() || null,
         name: user.name,
+        allowedModules: tokenModulesForRole(
+          user.role,
+          (user as { allowedModules?: string[] }).allowedModules,
+        ),
       };
 
       const newAccessToken = this.jwtService.sign(payload, {
@@ -431,6 +440,49 @@ export class AuthService {
     }
   }
 
+  async getMe(authenticatedUser: AuthenticatedUser) {
+    const user = await this.usersService.getById(authenticatedUser.userId);
+    await this.assertOrgSubscriptionActive(user);
+    return this.buildMeResponse(user);
+  }
+
+  private buildMeResponse(user: {
+    _id?: { toString(): string } | string;
+    id?: string;
+    role: Role;
+    organizationId?: unknown;
+    orgId?: unknown;
+    email: string;
+    name: string;
+    allowedModules?: string[];
+    isActive?: boolean;
+  }) {
+    const id =
+      typeof user._id === 'string'
+        ? user._id
+        : user._id
+          ? user._id.toString()
+          : user.id;
+    const orgId =
+      user.orgId ??
+      (user.organizationId &&
+      typeof user.organizationId === 'object' &&
+      user.organizationId !== null &&
+      'toString' in user.organizationId
+        ? (user.organizationId as { toString(): string }).toString()
+        : (user.organizationId ?? null));
+
+    return {
+      id,
+      role: user.role,
+      orgId,
+      email: user.email,
+      name: user.name,
+      isActive: user.isActive !== false,
+      allowedModules: meModulesForRole(user.role, user.allowedModules),
+    };
+  }
+
   private async assertOrgSubscriptionActive(user: {
     role: Role;
     organizationId?: { toString(): string } | string | null;
@@ -464,6 +516,7 @@ export class AuthService {
       organizationId?: unknown;
       email: string;
       name: string;
+      allowedModules?: string[];
     },
     accessToken: string,
     refreshToken: string,
@@ -471,13 +524,7 @@ export class AuthService {
     return {
       accessToken,
       refreshToken,
-      user: {
-        id: typeof user._id === 'string' ? user._id : user._id.toString(),
-        role: user.role,
-        orgId: user.organizationId,
-        email: user.email,
-        name: user.name,
-      },
+      user: this.buildMeResponse(user),
     };
   }
 

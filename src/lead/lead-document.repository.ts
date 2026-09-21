@@ -25,6 +25,28 @@ export class LeadDocumentRepository extends BaseRepository<LeadDocumentRecordDoc
       .sort({ createdAt: -1 });
   }
 
+  async findTypesByLeadIds(organizationId: string, leadIds: string[]) {
+    const map = new Map<string, Array<{ documentType: string }>>();
+    if (leadIds.length === 0) {
+      return map;
+    }
+    const rows = await this.model
+      .find({
+        organizationId: new Types.ObjectId(organizationId),
+        leadId: { $in: leadIds.map((id) => new Types.ObjectId(id)) },
+      })
+      .select('leadId documentType')
+      .lean()
+      .exec();
+    for (const row of rows) {
+      const id = String(row.leadId);
+      const list = map.get(id) || [];
+      list.push({ documentType: row.documentType });
+      map.set(id, list);
+    }
+    return map;
+  }
+
   async replaceDocument(
     filter: Record<string, unknown>,
     payload: Partial<LeadDocumentRecord>,

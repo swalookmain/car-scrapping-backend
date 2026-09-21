@@ -22,6 +22,12 @@ import { PaginatedResponse } from 'src/common/interface/paginated-response.inter
 import { AuditLogService } from 'src/audit-log/audit-log.service';
 import { AuditAction } from 'src/common/enum/audit.enum';
 import { Role } from 'src/common/enum/role.enum';
+import { LeadService } from 'src/lead/lead.service';
+import {
+  andMongoFilters,
+  isStaffUser,
+  staffInvoiceOwnerFilter,
+} from 'src/common/access/data-scope';
 
 type VehicleComplianceRepoPort = {
   create: (
@@ -61,6 +67,7 @@ export class VehicleComplianceService {
     private readonly vehicleInvoiceRepository: VehicleInvoiceRepository,
     private readonly organizationsService: OrganizationsService,
     private readonly auditLogService: AuditLogService,
+    private readonly leadService: LeadService,
     @Inject(WINSTON_MODULE_NEST_PROVIDER)
     private readonly logger: LoggerService,
   ) {}
@@ -405,6 +412,20 @@ export class VehicleComplianceService {
       const filter: Record<string, unknown> = {
         organizationId: new Types.ObjectId(orgId),
       };
+
+      if (isStaffUser(authenticatedUser)) {
+        const leadIds = await this.leadService.getOwnedLeadIds(authenticatedUser);
+        const invoiceIds = await this.invoiceRepository.findIds(
+          andMongoFilters(
+            {
+              organizationId: new Types.ObjectId(orgId),
+              isDeleted: { $ne: true },
+            },
+            staffInvoiceOwnerFilter(authenticatedUser, leadIds),
+          ),
+        );
+        filter.invoiceId = { $in: invoiceIds };
+      }
 
       if (query.invoiceId) {
         filter.invoiceId = new Types.ObjectId(

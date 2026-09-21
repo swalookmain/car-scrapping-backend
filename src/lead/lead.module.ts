@@ -1,4 +1,4 @@
-import { Module } from '@nestjs/common';
+import { Module, forwardRef } from '@nestjs/common';
 import { MongooseModule } from '@nestjs/mongoose';
 import { OrganizationsModule } from 'src/organizations/organizations.module';
 import { UsersModule } from 'src/users/users.module';
@@ -11,6 +11,8 @@ import {
   LeadDocumentRecord,
   LeadDocumentRecordSchema,
 } from './lead-document.schema';
+import { YardModule } from 'src/yard/yard.module';
+import { LiftingModule } from 'src/lifting/lifting.module';
 
 @Module({
   imports: [
@@ -20,6 +22,8 @@ import {
     ]),
     OrganizationsModule,
     UsersModule,
+    forwardRef(() => YardModule),
+    LiftingModule,
   ],
   controllers: [LeadController],
   providers: [LeadService, LeadRepository, LeadDocumentRepository],

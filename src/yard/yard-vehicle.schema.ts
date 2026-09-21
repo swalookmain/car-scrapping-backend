@@ -68,6 +68,18 @@ export class YardVehicle extends Document {
   @Prop({ type: Date })
   exitedAt?: Date;
 
+  @Prop({ type: Date })
+  arrivedAt?: Date;
+
+  @Prop({ type: String, trim: true })
+  codNumber?: string;
+
+  @Prop({ type: String, trim: true })
+  codDocumentUrl?: string;
+
+  @Prop({ type: String, trim: true })
+  codStorageKey?: string;
+
   @Prop({ type: String, trim: true })
   remarks?: string;
 
@@ -97,3 +109,7 @@ YardVehicleSchema.index(
 );
 YardVehicleSchema.index({ organizationId: 1, currentStatus: 1 });
 YardVehicleSchema.index({ organizationId: 1, registrationNumber: 1 });
+YardVehicleSchema.index(
+  { organizationId: 1, leadId: 1 },
+  { unique: true, sparse: true },
+);

@@ -1,7 +1,11 @@
 import { Module } from '@nestjs/common';
+import { APP_GUARD } from '@nestjs/core';
 import { ScheduleModule } from '@nestjs/schedule';
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
+import { jwtAuthGuard } from './common/guards/jwt-auth.guard';
+import { ModulesGuard } from './common/guards/modules.guard';
+import { AccessModule } from './common/access/access.module';
 import { AuthModule } from './auth/auth.module';
 import { UsersModule } from './users/users.module';
 import { OrganizationsModule } from './organizations/organizations.module';
@@ -30,12 +34,14 @@ import { PartCatalogModule } from './part-catalog/part-catalog.module';
 import { DashboardModule } from './dashboard/dashboard.module';
 import { MaterialMasterModule } from './material-master/material-master.module';
 import { InventoryAuditModule } from './inventory-audit/inventory-audit.module';
+import { LiftingModule } from './lifting/lifting.module';
 
 @Module({
   imports: [
     ScheduleModule.forRoot(),
     WinstonModule.forRoot(winstonConfig),
     StorageModule,
+    AccessModule,
     AuthModule,
     UsersModule,
     OrganizationsModule,
@@ -60,8 +66,14 @@ import { InventoryAuditModule } from './inventory-audit/inventory-audit.module';
     DashboardModule,
     MaterialMasterModule,
     InventoryAuditModule,
+    LiftingModule,
   ],
   controllers: [AppController],
-  providers: [AppService, AuditLogInterceptor],
+  providers: [
+    AppService,
+    AuditLogInterceptor,
+    { provide: APP_GUARD, useClass: jwtAuthGuard },
+    { provide: APP_GUARD, useClass: ModulesGuard },
+  ],
 })
 export class AppModule {}

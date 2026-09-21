@@ -10,6 +10,7 @@ import {
 import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { jwtAuthGuard } from 'src/common/guards/jwt-auth.guard';
 import { RolesGuard } from 'src/common/guards/roles.guard';
+import { ModulesGuard } from 'src/common/guards/modules.guard';
 import { Roles } from 'src/common/decorators/roles.decorators';
 import { Role } from 'src/common/enum/role.enum';
 import { GetUser } from 'src/common/decorators/user.decorator';
@@ -18,11 +19,14 @@ import { PartCatalogService } from './part-catalog.service';
 import { AddVariantPartDto } from './dto/add-variant-part.dto';
 import { CreatePartCategoryDto } from './dto/create-part-category.dto';
 import { VehicleType } from 'src/common/enum/vehicleType.enum';
+import { SetModule } from 'src/common/decorators/set-module.decorator';
+import { APP_MODULES } from 'src/common/access/app-modules';
 
 @ApiTags('Part Catalog')
 @ApiBearerAuth()
 @Controller('part-catalog')
-@UseGuards(jwtAuthGuard, RolesGuard)
+@UseGuards(jwtAuthGuard, RolesGuard, ModulesGuard)
+@SetModule(APP_MODULES.INVENTORY.id)
 export class PartCatalogController {
   constructor(private readonly partCatalogService: PartCatalogService) {}
 

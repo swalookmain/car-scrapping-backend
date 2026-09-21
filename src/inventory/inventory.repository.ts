@@ -34,9 +34,13 @@ export class InventoryRepository extends BaseRepository<InventoryDocument> {
     limit: number;
     search?: string;
     organizationId?: string;
+    invoiceIds?: Types.ObjectId[];
   }) {
     const skip = (params.page - 1) * params.limit;
     const matchStage: Record<string, unknown> = {};
+    if (params.invoiceIds) {
+      matchStage.invoiceId = { $in: params.invoiceIds };
+    }
 
     const pipeline: PipelineStage[] = [
       { $match: matchStage },

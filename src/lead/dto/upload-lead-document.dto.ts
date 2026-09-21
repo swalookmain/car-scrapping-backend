@@ -1,12 +1,14 @@
-import { ApiProperty } from '@nestjs/swagger';
-import { IsIn } from 'class-validator';
+import { ApiPropertyOptional } from '@nestjs/swagger';
+import { IsIn, IsOptional } from 'class-validator';
 
 export class UploadLeadDocumentDto {
-  @ApiProperty({ enum: ['single', 'double'], default: 'single' })
+  @ApiPropertyOptional({ enum: ['single', 'double'], default: 'single' })
+  @IsOptional()
   @IsIn(['single', 'double'])
-  aadhaarPageMode: 'single' | 'double';
+  aadhaarPageMode?: 'single' | 'double';
 
-  @ApiProperty({ enum: ['single', 'double'], default: 'single' })
+  @ApiPropertyOptional({ enum: ['single', 'double'], default: 'single' })
+  @IsOptional()
   @IsIn(['single', 'double'])
-  rcPageMode: 'single' | 'double';
+  rcPageMode?: 'single' | 'double';
 }

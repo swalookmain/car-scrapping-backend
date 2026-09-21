@@ -18,6 +18,7 @@ import {
 import type { Response } from 'express';
 import { jwtAuthGuard } from 'src/common/guards/jwt-auth.guard';
 import { RolesGuard } from 'src/common/guards/roles.guard';
+import { ModulesGuard } from 'src/common/guards/modules.guard';
 import { Roles } from 'src/common/decorators/roles.decorators';
 import { Role } from 'src/common/enum/role.enum';
 import { GetUser } from 'src/common/decorators/user.decorator';
@@ -25,11 +26,14 @@ import type { AuthenticatedUser } from 'src/common/interface/authenticated-user.
 import { AuthorizationLetterService } from './authorization-letter.service';
 import { CreateAuthorizationLetterDto } from './dto/create-authorization-letter.dto';
 import { UpdateAuthorizationLetterDto } from './dto/update-authorization-letter.dto';
+import { SetModule } from 'src/common/decorators/set-module.decorator';
+import { APP_MODULES } from 'src/common/access/app-modules';
 
 @ApiTags('Authorization Letters')
 @ApiBearerAuth()
 @Controller('authorization-letters')
-@UseGuards(jwtAuthGuard, RolesGuard)
+@UseGuards(jwtAuthGuard, RolesGuard, ModulesGuard)
+@SetModule(APP_MODULES.AUCTIONS.id)
 export class AuthorizationLetterController {
   constructor(
     private readonly authorizationLetterService: AuthorizationLetterService,

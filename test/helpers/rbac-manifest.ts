@@ -58,8 +58,14 @@ export const RBAC_ROUTE_GROUPS: RbacRouteGroup[] = [
       {
         method: 'get',
         path: `/users/find-all-staff-by-organization/${ORG_ID}`,
-        access: [Role.SUPER_ADMIN, Role.ADMIN],
+        access: [Role.SUPER_ADMIN, Role.ADMIN, Role.STAFF],
       },
+    ],
+  },
+  {
+    name: 'Access',
+    routes: [
+      { method: 'get', path: '/access/modules', access: [Role.ADMIN] },
     ],
   },
   {
@@ -228,6 +234,26 @@ export const RBAC_ROUTE_GROUPS: RbacRouteGroup[] = [
       },
       { method: 'get', path: '/yard/zones', access: [Role.ADMIN, Role.STAFF] },
       { method: 'post', path: '/yard/zones', access: [Role.ADMIN] },
+    ],
+  },
+  {
+    name: 'Lifting',
+    routes: [
+      {
+        method: 'get',
+        path: '/lifting',
+        access: [Role.ADMIN, Role.STAFF],
+      },
+      {
+        method: 'get',
+        path: '/lifting/summary',
+        access: [Role.ADMIN, Role.STAFF],
+      },
+      {
+        method: 'get',
+        path: `/lifting/${OID}`,
+        access: [Role.ADMIN, Role.STAFF],
+      },
     ],
   },
   {

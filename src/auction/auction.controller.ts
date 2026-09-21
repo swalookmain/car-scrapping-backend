@@ -15,6 +15,7 @@ import { ApiBearerAuth, ApiBody, ApiConsumes, ApiTags } from '@nestjs/swagger';
 import { AuctionService } from './auction.service';
 import { jwtAuthGuard } from 'src/common/guards/jwt-auth.guard';
 import { RolesGuard } from 'src/common/guards/roles.guard';
+import { ModulesGuard } from 'src/common/guards/modules.guard';
 import { Roles } from 'src/common/decorators/roles.decorators';
 import { Role } from 'src/common/enum/role.enum';
 import { CreateAuctionDto } from './dto/create-auction.dto';
@@ -33,13 +34,14 @@ import { AuctionStatus } from 'src/common/enum/auctionStatus.enum';
 import { FileFieldsInterceptor } from '@nestjs/platform-express';
 import { DOCUMENT_UPLOAD_OPTIONS } from 'src/common/utils/document-upload.util';
 import type { Express } from 'express';
-
-
+import { SetModule } from 'src/common/decorators/set-module.decorator';
+import { APP_MODULES } from 'src/common/access/app-modules';
 
 @ApiTags('Auction')
 @ApiBearerAuth()
 @Controller('auctions')
-@UseGuards(jwtAuthGuard, RolesGuard)
+@UseGuards(jwtAuthGuard, RolesGuard, ModulesGuard)
+@SetModule(APP_MODULES.AUCTIONS.id)
 export class AuctionController {
   constructor(private readonly auctionService: AuctionService) {}
 

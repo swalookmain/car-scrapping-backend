@@ -4,6 +4,7 @@ export interface JwtPayload {
   role: string;
   orgId: string | null;
   name: string;
+  allowedModules: string[];
   iat?: number;
   exp?: number;
 }

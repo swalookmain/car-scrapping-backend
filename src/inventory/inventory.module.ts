@@ -8,6 +8,7 @@ import { InvoiceModule } from 'src/invoice/invoice.module';
 import { YardModule } from 'src/yard/yard.module';
 import { MaterialMasterModule } from 'src/material-master/material-master.module';
 import { PartCatalogModule } from 'src/part-catalog/part-catalog.module';
+import { LeadModule } from 'src/lead/lead.module';
 
 @Module({
   imports: [
@@ -18,6 +19,7 @@ import { PartCatalogModule } from 'src/part-catalog/part-catalog.module';
     forwardRef(() => YardModule),
     MaterialMasterModule,
     PartCatalogModule,
+    LeadModule,
   ],
   controllers: [InventoryController],
   providers: [InventoryService, InventoryRepository],

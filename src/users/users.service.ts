@@ -4,6 +4,7 @@ import {
   NotFoundException,
   ConflictException,
   Inject,
+  forwardRef,
 } from '@nestjs/common';
 import type { LoggerService } from '@nestjs/common';
 import { WINSTON_MODULE_NEST_PROVIDER } from 'nest-winston';
@@ -23,6 +24,11 @@ import { Types } from 'mongoose';
 import { SubscriptionService } from '../subscription/subscription.service';
 import { SubscriptionCreatedBy } from '../subscription/enum/subscription-created-by.enum';
 import { SubscriptionInputDto } from '../subscription/dto/subscription-input.dto';
+import { AuthRepository } from '../auth/auth.repository';
+import {
+  listsEqual,
+  sanitizeStaffModules,
+} from 'src/common/access/app-modules';
 
 @Injectable()
 export class UsersService {
@@ -30,6 +36,8 @@ export class UsersService {
     private readonly userRepo: UsersRepository,
     private readonly organizationsService: OrganizationsService,
     private readonly subscriptionService: SubscriptionService,
+    @Inject(forwardRef(() => AuthRepository))
+    private readonly authRepository: AuthRepository,
     @Inject(WINSTON_MODULE_NEST_PROVIDER)
     private readonly logger: LoggerService,
   ) {}
@@ -224,6 +232,9 @@ export class UsersService {
       const passwordHash = await hashPassword(userData.password);
       sanitizedData.password = passwordHash;
       sanitizedData.role = Role.STAFF;
+      sanitizedData.allowedModules = sanitizeStaffModules(
+        userData.allowedModules,
+      );
       // Automatically assign admin's organization to staff
       sanitizedData.organizationId = validateObjectId(
         authenticatedUser.orgId,
@@ -320,29 +331,54 @@ export class UsersService {
     return this.userRepo.findByIdWithRefreshToken(validatedId);
   }
 
-  async getById(id: string) {
+  async getById(id: string, actor?: AuthenticatedUser) {
     const validatedId = validateObjectId(id, 'User ID');
     const user = await this.userRepo.findById(validatedId);
     if (!user) {
       throw new NotFoundException('User not found');
     }
+    this.assertActorCanManageUser(user, actor);
     const userObj = user.toObject ? user.toObject() : user;
     // eslint-disable-next-line @typescript-eslint/no-unused-vars
     const { password, refreshToken, ...sanitized } = userObj;
     return sanitized;
   }
-  async update(id: string, updateData: Partial<any>) {
+  async update(id: string, updateData: Partial<any>, actor?: AuthenticatedUser) {
     const validatedId = validateObjectId(id, 'User ID');
     if (updateData.password) {
       throw new BadRequestException(
         'Password cannot be updated through this endpoint',
       );
     }
+    const existing = await this.userRepo.findById(validatedId);
+    if (!existing) {
+      throw new NotFoundException('User not found');
+    }
+    this.assertActorCanManageUser(existing, actor);
+
     const sanitizedData = sanitizeObject(updateData);
+    let modulesChanged = false;
+
+    if ('allowedModules' in sanitizedData) {
+      if (existing.role !== Role.STAFF) {
+        delete sanitizedData.allowedModules;
+      } else {
+        const next = sanitizeStaffModules(sanitizedData.allowedModules);
+        const prev = sanitizeStaffModules(existing.allowedModules);
+        sanitizedData.allowedModules = next;
+        modulesChanged = !listsEqual(prev, next);
+      }
+    }
+
     const user = await this.userRepo.updateById(validatedId, sanitizedData);
     if (!user) {
       throw new NotFoundException('User not found');
     }
+
+    if (modulesChanged) {
+      await this.authRepository.deleteRefreshTokenByUserId(validatedId);
+    }
+
     const userObj = user.toObject ? user.toObject() : user;
     // eslint-disable-next-line @typescript-eslint/no-unused-vars
     const { password, refreshToken, ...sanitized } = userObj;
@@ -357,11 +393,20 @@ export class UsersService {
     return { message: 'User deleted successfully' };
   }
 
-  async updateRefreshToken(id: string, refreshToken: string) {
+  async updateRefreshToken(
+    id: string,
+    refreshToken: string,
+    actor?: AuthenticatedUser,
+  ) {
     const validatedId = validateObjectId(id, 'User ID');
     if (!refreshToken || typeof refreshToken !== 'string') {
       throw new BadRequestException('Invalid refresh token');
     }
+    const existing = await this.userRepo.findById(validatedId);
+    if (!existing) {
+      throw new NotFoundException('User not found');
+    }
+    this.assertActorCanManageUser(existing, actor);
     return this.userRepo.updateRefreshToken(validatedId, refreshToken);
   }
 
@@ -369,9 +414,15 @@ export class UsersService {
     organizationId: string,
     page?: number,
     limit?: number,
+    actor?: AuthenticatedUser,
   ): Promise<PaginatedResponse<any> | any[]> {
     const validatedOrgId = validateObjectId(organizationId, 'Organization ID');
-    console.log('validatedOrgId', validatedOrgId);
+    if (
+      (actor?.role === Role.ADMIN || actor?.role === Role.STAFF) &&
+      actor.orgId !== validatedOrgId
+    ) {
+      throw new NotFoundException('Staff not found');
+    }
 
     if (page !== undefined && limit !== undefined) {
       const { page: safePage, limit: safeLimit } = getPagination(page, limit);
@@ -385,7 +436,6 @@ export class UsersService {
         safePage,
         safeLimit,
       );
-      console.log('data', data);
       const totalPages = Math.ceil(total / safeLimit);
 
       const sanitizedData = data.map((user) => {
@@ -414,5 +464,20 @@ export class UsersService {
       const { password, refreshToken, ...sanitized } = userObj;
       return sanitized;
     });
+  }
+
+  private assertActorCanManageUser(
+    target: { role?: Role; organizationId?: Types.ObjectId | null },
+    actor?: AuthenticatedUser,
+  ) {
+    if (!actor || actor.role === Role.SUPER_ADMIN) {
+      return;
+    }
+    if (actor.role !== Role.ADMIN) {
+      throw new NotFoundException('User not found');
+    }
+    if (!actor.orgId || target.organizationId?.toString() !== actor.orgId) {
+      throw new NotFoundException('User not found');
+    }
   }
 }

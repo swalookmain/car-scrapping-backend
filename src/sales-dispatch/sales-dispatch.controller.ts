@@ -17,6 +17,7 @@ import {
 } from '@nestjs/swagger';
 import { jwtAuthGuard } from 'src/common/guards/jwt-auth.guard';
 import { RolesGuard } from 'src/common/guards/roles.guard';
+import { ModulesGuard } from 'src/common/guards/modules.guard';
 import { Roles } from 'src/common/decorators/roles.decorators';
 import { Role } from 'src/common/enum/role.enum';
 import { GetUser } from 'src/common/decorators/user.decorator';
@@ -28,11 +29,14 @@ import { QueryBuyersDto } from './dto/query-buyers.dto';
 import { CreateSalesInvoiceDto } from './dto/create-sales-invoice.dto';
 import { UpdateSalesInvoiceDto } from './dto/update-sales-invoice.dto';
 import { QuerySalesInvoiceDto } from './dto/query-sales-invoice.dto';
+import { SetModule } from 'src/common/decorators/set-module.decorator';
+import { APP_MODULES } from 'src/common/access/app-modules';
 
 @ApiTags('Sales Dispatch')
 @ApiBearerAuth()
 @Controller('sales-dispatch')
-@UseGuards(jwtAuthGuard, RolesGuard)
+@UseGuards(jwtAuthGuard, RolesGuard, ModulesGuard)
+@SetModule(APP_MODULES.SALES.id)
 export class SalesDispatchController {
   constructor(private readonly salesDispatchService: SalesDispatchService) {}
 
