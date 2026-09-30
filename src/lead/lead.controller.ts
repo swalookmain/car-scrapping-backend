@@ -48,7 +48,7 @@ export class LeadController {
   constructor(private readonly leadService: LeadService) {}
 
   @Post()
-  @Roles(Role.ADMIN)
+  @Roles(Role.ADMIN, Role.STAFF)
   @ApiOperation({ summary: 'Create a new lead' })
   createLead(
     @Body() createLeadDto: CreateLeadDto,

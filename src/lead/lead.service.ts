@@ -64,18 +64,21 @@ export class LeadService {
     authenticatedUser: AuthenticatedUser,
   ) {
     try {
-      this.ensureAdmin(authenticatedUser);
       const orgId = this.getOrgId(authenticatedUser);
       await this.assertOrganization(orgId);
 
       const sanitizedData = this.normalizeLeadData(
         sanitizeObject(createLeadDto) as CreateLeadDto,
       );
-      const { purchaseDate, ...restData } = sanitizedData;
+      const { purchaseDate, assignedTo: requestedAssignee, ...restData } =
+        sanitizedData;
 
-      const assignedStaffId = sanitizedData.assignedTo
-        ? await this.assertAssignableStaff(sanitizedData.assignedTo, orgId)
-        : undefined;
+      const assignedStaffId =
+        authenticatedUser.role === Role.STAFF
+          ? authenticatedUser.userId
+          : requestedAssignee
+            ? await this.assertAssignableStaff(requestedAssignee, orgId)
+            : undefined;
 
       const createdLead = await this.leadRepository.create({
         ...restData,
