@@ -13,6 +13,7 @@ import { AuditLogModule } from 'src/audit-log/audit-log.module';
 import { AuctionModule } from 'src/auction/auction.module';
 import { LeadModule } from 'src/lead/lead.module';
 import { LiftingModule } from 'src/lifting/lifting.module';
+import { OrganizationsModule } from 'src/organizations/organizations.module';
 
 @Module({
   imports: [
@@ -26,6 +27,7 @@ import { LiftingModule } from 'src/lifting/lifting.module';
     AuditLogModule,
     forwardRef(() => LeadModule),
     LiftingModule,
+    OrganizationsModule,
   ],
   controllers: [YardController],
   providers: [

@@ -24,6 +24,10 @@ export class LedgerEntry extends Document {
 
   @Prop({ type: Types.ObjectId, required: true })
   referenceId: Types.ObjectId;
+
+  /** Business date of the source document. Falls back to createdAt for older rows. */
+  @Prop({ type: Date })
+  entryDate?: Date;
 }
 
 export type LedgerEntryDocument = LedgerEntry & Document;
@@ -34,3 +38,4 @@ LedgerEntrySchema.index(
   { name: 'idx_org_ref' },
 );
 LedgerEntrySchema.index({ organizationId: 1, createdAt: -1 }, { name: 'idx_org_created' });
+LedgerEntrySchema.index({ organizationId: 1, entryDate: -1 }, { name: 'idx_org_entry_date' });

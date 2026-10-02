@@ -1,8 +1,9 @@
 import { ApiProperty } from '@nestjs/swagger';
 import { Type } from 'class-transformer';
 import { IsOptional, IsInt, Min, Max } from 'class-validator';
+import { DateRangeQueryDto } from './date-range-query.dto';
 
-export class PaginationQueryDto {
+export class PaginationQueryDto extends DateRangeQueryDto {
   @ApiProperty({
     required: false,
     default: 1,

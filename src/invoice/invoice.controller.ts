@@ -125,6 +125,8 @@ export class InvoiceController {
       authenticatedUser,
       query.page,
       query.limit,
+      query.fromDate,
+      query.toDate,
     );
   }
 

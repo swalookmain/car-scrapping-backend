@@ -11,6 +11,7 @@ import { AuditLogService } from 'src/audit-log/audit-log.service';
 import { AuthenticatedUser } from 'src/common/interface/authenticated-user.interface';
 import { sanitizeObject, validateObjectId } from 'src/common/utils/security.util';
 import { getPagination } from 'src/common/utils/pagination.util';
+import { dateWindowFilter } from 'src/common/utils/date-range.util';
 import { PaginatedResponse } from 'src/common/interface/paginated-response.interface';
 import { YardVehicleStatus } from 'src/common/enum/yardVehicleStatus.enum';
 import { YardSourceType } from 'src/common/enum/yardSourceType.enum';
@@ -25,6 +26,7 @@ import { AuctionVehicleRepository } from 'src/auction/auction-vehicle.repository
 import { AuctionRepository } from 'src/auction/auction.repository';
 import { LeadService } from 'src/lead/lead.service';
 import { LiftingService } from 'src/lifting/lifting.service';
+import { BooksPeriodService } from 'src/organizations/books-period.service';
 import { LotOutcomeStatus } from 'src/common/enum/lotOutcomeStatus.enum';
 import {
   andMongoFilters,
@@ -61,6 +63,7 @@ export class YardService implements OnModuleInit {
     private readonly auditLogService: AuditLogService,
     @Inject(WINSTON_MODULE_NEST_PROVIDER)
     private readonly logger: LoggerService,
+    private readonly booksPeriodService: BooksPeriodService,
   ) {}
 
   async onModuleInit() {
@@ -499,6 +502,7 @@ export class YardService implements OnModuleInit {
           : {}),
       },
       await this.staffYardListFilter(authenticatedUser),
+      dateWindowFilter('arrivedAt', query.fromDate, query.toDate, 'createdAt'),
     );
 
     const { data, total } = await this.yardVehicleRepository.findPaginated(
@@ -614,6 +618,7 @@ export class YardService implements OnModuleInit {
       updateData.grossWeightKg = sanitized.grossWeightKg;
     }
     if (sanitized.arrivedAt) {
+      await this.booksPeriodService.assertOpen(orgId, sanitized.arrivedAt, 'Arrival date');
       updateData.arrivedAt = new Date(sanitized.arrivedAt);
     }
     if (sanitized.codNumber !== undefined) {
@@ -755,6 +760,7 @@ export class YardService implements OnModuleInit {
   async completeDismantling(
     vehicleInvoiceId: string,
     authenticatedUser: AuthenticatedUser,
+    dismantledAt?: string,
   ) {
     const orgId = this.getOrgId(authenticatedUser);
     const userId = this.getUserId(authenticatedUser);
@@ -790,10 +796,11 @@ export class YardService implements OnModuleInit {
 
     this.assertTransition(fromStatus, toStatus, { viaCompleteDismantling: true });
 
-    const now = new Date();
+    const dismantledOn = dismantledAt ? new Date(dismantledAt) : new Date();
+    await this.booksPeriodService.assertOpen(orgId, dismantledOn, 'Dismantle date');
     await this.yardVehicleRepository.updateById(yardVehicle._id.toString(), {
       currentStatus: toStatus,
-      dismantledAt: now,
+      dismantledAt: dismantledOn,
       updatedBy: userId,
     });
 

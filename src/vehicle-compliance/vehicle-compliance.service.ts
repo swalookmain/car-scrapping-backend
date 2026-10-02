@@ -18,6 +18,7 @@ import { InvoiceRepository } from 'src/invoice/invoice.repository';
 import { VehicleInvoiceRepository } from 'src/invoice/vehicle-invoice.repository';
 import { QueryVehicleCodRecordDto } from './dto/query-vehicle-cod-record.dto';
 import { getPagination } from 'src/common/utils/pagination.util';
+import { dateWindowFilter } from 'src/common/utils/date-range.util';
 import { PaginatedResponse } from 'src/common/interface/paginated-response.interface';
 import { AuditLogService } from 'src/audit-log/audit-log.service';
 import { AuditAction } from 'src/common/enum/audit.enum';
@@ -446,6 +447,10 @@ export class VehicleComplianceService {
       if (query.rtoStatus) {
         filter.rtoStatus = query.rtoStatus;
       }
+      Object.assign(
+        filter,
+        dateWindowFilter('codIssueDate', query.fromDate, query.toDate, 'createdAt') ?? {},
+      );
 
       const { page: safePage, limit: safeLimit } = getPagination(
         query.page,

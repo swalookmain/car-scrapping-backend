@@ -65,6 +65,8 @@ export class AuctionController {
       query.page,
       query.limit,
       query.status,
+      query.fromDate,
+      query.toDate,
     );
   }
 

@@ -1,4 +1,5 @@
 import { Body, Controller, Get, Post, Query, UseGuards } from '@nestjs/common';
+import { PaginationQueryDto } from 'src/common/dto/pagination-query.dto';
 import {
   ApiBearerAuth,
   ApiOperation,
@@ -69,13 +70,14 @@ export class TaxComplianceController {
   @ApiQuery({ name: 'limit', required: false, type: Number })
   getEwayBills(
     @GetUser() authenticatedUser: AuthenticatedUser,
-    @Query('page') page?: number,
-    @Query('limit') limit?: number,
+    @Query() query: PaginationQueryDto,
   ) {
     return this.taxComplianceService.getEwayBillRecords(
       authenticatedUser,
-      page,
-      limit,
+      query.page,
+      query.limit,
+      query.fromDate,
+      query.toDate,
     );
   }
 

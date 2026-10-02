@@ -4,11 +4,13 @@ import type { AuthenticatedUser } from 'src/common/interface/authenticated-user.
 import { sanitizeObject, validateObjectId } from 'src/common/utils/security.util';
 import { InvoicePaymentRecordRepository } from '../repositories/invoice-payment-record.repository';
 import type { CreateInvoicePaymentRecordDto } from '../dto/create-invoice-payment-record.dto';
+import { BooksPeriodService } from 'src/organizations/books-period.service';
 
 @Injectable()
 export class InvoicePaymentService {
   constructor(
     private readonly invoicePaymentRecordRepository: InvoicePaymentRecordRepository,
+    private readonly booksPeriodService: BooksPeriodService,
   ) {}
 
   async recordPayment(
@@ -18,6 +20,7 @@ export class InvoicePaymentService {
     const orgId = user.orgId;
     if (!orgId) throw new BadRequestException('Organization not found');
     const sanitized = sanitizeObject(dto) as CreateInvoicePaymentRecordDto;
+    await this.booksPeriodService.assertOpen(orgId, sanitized.paymentDate, 'Payment date');
     const invoiceId = validateObjectId(sanitized.invoiceId, 'Invoice ID');
     return this.invoicePaymentRecordRepository.create({
       organizationId: new Types.ObjectId(orgId),

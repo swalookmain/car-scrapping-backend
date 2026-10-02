@@ -12,6 +12,7 @@ import { OrganizationsService } from '../../src/organizations/organizations.serv
 import { SubscriptionService } from '../../src/subscription/subscription.service';
 import { OrganizationLetterSettingsService } from '../../src/organizations/organization-letter-settings.service';
 import { OrganizationFacilitySettingsService } from '../../src/organizations/organization-facility-settings.service';
+import { BooksPeriodService } from '../../src/organizations/books-period.service';
 import { AuditLogController } from '../../src/audit-log/audit-log.controller';
 import { AuditLogService } from '../../src/audit-log/audit-log.service';
 import { DashboardController } from '../../src/dashboard/dashboard.controller';
@@ -83,6 +84,7 @@ export const RBAC_MODULE_SETUPS: Record<string, RbacModuleSetup> = {
       svc(SubscriptionService),
       svc(OrganizationLetterSettingsService),
       svc(OrganizationFacilitySettingsService),
+      svc(BooksPeriodService),
     ],
   },
   AuditLog: {

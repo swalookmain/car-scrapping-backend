@@ -85,6 +85,16 @@ export const RBAC_ROUTE_GROUPS: RbacRouteGroup[] = [
       },
       {
         method: 'get',
+        path: '/organizations/books-settings',
+        access: [Role.ADMIN, Role.STAFF],
+      },
+      {
+        method: 'patch',
+        path: '/organizations/books-settings',
+        access: [Role.ADMIN],
+      },
+      {
+        method: 'get',
         path: '/organizations/letter-settings',
         access: [Role.ADMIN],
       },
@@ -384,7 +394,7 @@ export const RBAC_ROUTE_GROUPS: RbacRouteGroup[] = [
   {
     name: 'Lead',
     routes: [
-      { method: 'post', path: '/leads', access: [Role.ADMIN] },
+      { method: 'post', path: '/leads', access: [Role.ADMIN, Role.STAFF] },
       { method: 'get', path: '/leads', access: [Role.ADMIN, Role.STAFF] },
       { method: 'get', path: '/leads/lookup', access: [Role.ADMIN, Role.STAFF] },
       {
@@ -400,7 +410,7 @@ export const RBAC_ROUTE_GROUPS: RbacRouteGroup[] = [
       {
         method: 'post',
         path: `/leads/${OID}/documents`,
-        access: [Role.ADMIN],
+        access: [Role.ADMIN, Role.STAFF],
       },
       {
         method: 'get',

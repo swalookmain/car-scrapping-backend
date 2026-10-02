@@ -92,6 +92,7 @@ describe('YardService lead close + invoice attach', () => {
       liftingService as never,
       {} as never,
       { error: jest.fn(), log: jest.fn(), warn: jest.fn() } as never,
+      { assertOpen: jest.fn().mockResolvedValue(undefined) } as never,
     );
   });
 

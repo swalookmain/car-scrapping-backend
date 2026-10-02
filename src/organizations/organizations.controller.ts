@@ -41,7 +41,10 @@ import { OrganizationLetterSettingsService } from './organization-letter-setting
 import { UpdateLetterSettingsDto } from './dto/update-letter-settings.dto';
 import { OrganizationFacilitySettingsService } from './organization-facility-settings.service';
 import { UpdateFacilitySettingsDto } from './dto/update-facility-settings.dto';
+import { BooksPeriodService } from './books-period.service';
+import { UpdateBooksSettingsDto } from './dto/update-books-settings.dto';
 import { SetModule } from 'src/common/decorators/set-module.decorator';
+import { SkipModuleCheck } from 'src/common/decorators/skip-module-check.decorator';
 import { APP_MODULES } from 'src/common/access/app-modules';
 
 @ApiTags('Organizations')
@@ -55,6 +58,7 @@ export class OrganizationsController {
     private readonly subscriptionService: SubscriptionService,
     private readonly letterSettingsService: OrganizationLetterSettingsService,
     private readonly facilitySettingsService: OrganizationFacilitySettingsService,
+    private readonly booksPeriodService: BooksPeriodService,
   ) {}
 
   @Post()
@@ -110,6 +114,25 @@ export class OrganizationsController {
     @Body() dto: UpdateSubscriptionDto,
   ) {
     return this.subscriptionService.update(id, dto);
+  }
+
+  @Get('books-settings')
+  @SkipModuleCheck()
+  @Roles(Role.ADMIN, Role.STAFF)
+  @ApiOperation({ summary: 'Get the books start date for historical entry' })
+  getBooksSettings(@GetUser() user: AuthenticatedUser) {
+    return this.booksPeriodService.getForUser(user);
+  }
+
+  @Patch('books-settings')
+  @SetModule(APP_MODULES.SETTINGS.id)
+  @Roles(Role.ADMIN)
+  @ApiOperation({ summary: 'Update the books start date for historical entry' })
+  updateBooksSettings(
+    @GetUser() user: AuthenticatedUser,
+    @Body() dto: UpdateBooksSettingsDto,
+  ) {
+    return this.booksPeriodService.updateForUser(user, dto);
   }
 
   @Get('letter-settings')

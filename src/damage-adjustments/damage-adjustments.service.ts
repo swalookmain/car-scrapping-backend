@@ -10,6 +10,7 @@ import type { AuthenticatedUser } from 'src/common/interface/authenticated-user.
 import { sanitizeObject, validateObjectId } from 'src/common/utils/security.util';
 import type { PaginatedResponse } from 'src/common/interface/paginated-response.interface';
 import { getPagination } from 'src/common/utils/pagination.util';
+import { dateWindowFilter } from 'src/common/utils/date-range.util';
 import { Role } from 'src/common/enum/role.enum';
 import { InventoryRepository } from 'src/inventory/inventory.repository';
 import type { InventoryDocument } from 'src/inventory/inventory.schema';
@@ -130,9 +131,13 @@ export class DamageAdjustmentsService {
     const filter: Record<string, unknown> = {
       organizationId: new Types.ObjectId(orgId),
     };
+    if (authenticatedUser.role === Role.STAFF) {
+      filter.recordedBy = new Types.ObjectId(authenticatedUser.userId);
+    }
     if (query.partId) {
       filter.partId = new Types.ObjectId(validateObjectId(query.partId, 'Inventory ID'));
     }
+    Object.assign(filter, dateWindowFilter('createdAt', query.fromDate, query.toDate) ?? {});
 
     const { page, limit } = getPagination(query.page, query.limit);
     const { data, total } = await this.damageAdjustmentRepo.findPaginatedWithPartNames(

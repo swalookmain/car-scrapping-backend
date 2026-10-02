@@ -2,9 +2,11 @@ import { BadRequestException, Injectable, NotFoundException } from '@nestjs/comm
 import { InjectModel } from '@nestjs/mongoose';
 import { Types } from 'mongoose';
 import { Model } from 'mongoose';
+import { isStaffUser } from 'src/common/access/data-scope';
 import type { AuthenticatedUser } from 'src/common/interface/authenticated-user.interface';
 import { sanitizeObject, validateObjectId } from 'src/common/utils/security.util';
 import { getPagination } from 'src/common/utils/pagination.util';
+import { dateWindowFilter } from 'src/common/utils/date-range.util';
 import { InvoiceType } from 'src/common/enum/invoiceType.enum';
 import { GstAuditEventType } from 'src/common/enum/gstAuditEventType.enum';
 import { SalesInvoiceStatus } from 'src/common/enum/salesInvoiceStatus.enum';
@@ -77,6 +79,9 @@ export class TaxComplianceService {
     const salesInvoice = await this.salesInvoiceModel.findOne({
       _id: new Types.ObjectId(salesInvoiceId),
       organizationId: new Types.ObjectId(orgId),
+      ...(isStaffUser(authenticatedUser)
+        ? { createdBy: new Types.ObjectId(authenticatedUser.userId) }
+        : {}),
     });
     if (!salesInvoice) {
       throw new NotFoundException('Sales invoice not found');
@@ -126,13 +131,27 @@ export class TaxComplianceService {
     authenticatedUser: AuthenticatedUser,
     page?: number,
     limit?: number,
+    fromDate?: string,
+    toDate?: string,
   ) {
     const orgId = this.getOrgId(authenticatedUser);
     const { page: safePage, limit: safeLimit } = getPagination(page, limit);
+    const filter: Record<string, unknown> = {
+      organizationId: new Types.ObjectId(orgId),
+    };
+    if (isStaffUser(authenticatedUser)) {
+      const owned = await this.salesInvoiceModel
+        .find({
+          organizationId: new Types.ObjectId(orgId),
+          createdBy: new Types.ObjectId(authenticatedUser.userId),
+        })
+        .select('_id')
+        .lean();
+      filter.salesInvoiceId = { $in: owned.map((row) => row._id) };
+    }
+    Object.assign(filter, dateWindowFilter('ewayGeneratedDate', fromDate, toDate) ?? {});
     const { data, total } = await this.ewayBillRecordRepository.findPaginated(
-      {
-        organizationId: new Types.ObjectId(orgId),
-      },
+      filter,
       safePage,
       safeLimit,
     );
@@ -171,6 +190,7 @@ export class TaxComplianceService {
         validateObjectId(query.invoiceId, 'Invoice ID'),
       );
     }
+    Object.assign(filter, dateWindowFilter('createdAt', query.fromDate, query.toDate) ?? {});
 
     const { data, total } = await this.gstAuditLogRepository.findPaginated(
       filter,

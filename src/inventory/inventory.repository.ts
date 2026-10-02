@@ -3,6 +3,7 @@ import { InjectModel } from '@nestjs/mongoose';
 import { Model, PipelineStage, Types } from 'mongoose';
 import { Inventory, InventoryDocument } from './inventory.schema';
 import { BaseRepository } from 'src/common/repository/base.repository';
+import { dateWindowFilter } from 'src/common/utils/date-range.util';
 
 @Injectable()
 export class InventoryRepository extends BaseRepository<InventoryDocument> {
@@ -35,12 +36,18 @@ export class InventoryRepository extends BaseRepository<InventoryDocument> {
     search?: string;
     organizationId?: string;
     invoiceIds?: Types.ObjectId[];
+    fromDate?: string;
+    toDate?: string;
   }) {
     const skip = (params.page - 1) * params.limit;
     const matchStage: Record<string, unknown> = {};
     if (params.invoiceIds) {
       matchStage.invoiceId = { $in: params.invoiceIds };
     }
+    Object.assign(
+      matchStage,
+      dateWindowFilter('businessDate', params.fromDate, params.toDate, 'createdAt') ?? {},
+    );
 
     const pipeline: PipelineStage[] = [
       { $match: matchStage },

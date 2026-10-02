@@ -1,6 +1,6 @@
 import { ApiPropertyOptional } from '@nestjs/swagger';
 import { Type } from 'class-transformer';
-import { IsEnum, IsMongoId, IsNumber, IsOptional, Min } from 'class-validator';
+import { IsDateString, IsEnum, IsMongoId, IsNumber, IsOptional, Min } from 'class-validator';
 import { GstAuditEventType } from 'src/common/enum/gstAuditEventType.enum';
 import { InvoiceType } from 'src/common/enum/invoiceType.enum';
 
@@ -33,4 +33,14 @@ export class QueryGstAuditLogDto {
   @IsOptional()
   @IsMongoId()
   invoiceId?: string;
+
+  @ApiPropertyOptional({ example: '2024-04-01' })
+  @IsOptional()
+  @IsDateString()
+  fromDate?: string;
+
+  @ApiPropertyOptional({ example: '2026-03-31' })
+  @IsOptional()
+  @IsDateString()
+  toDate?: string;
 }

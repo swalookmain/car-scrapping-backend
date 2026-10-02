@@ -9,6 +9,7 @@ import { YardModule } from 'src/yard/yard.module';
 import { MaterialMasterModule } from 'src/material-master/material-master.module';
 import { PartCatalogModule } from 'src/part-catalog/part-catalog.module';
 import { LeadModule } from 'src/lead/lead.module';
+import { OrganizationsModule } from 'src/organizations/organizations.module';
 
 @Module({
   imports: [
@@ -20,6 +21,7 @@ import { LeadModule } from 'src/lead/lead.module';
     MaterialMasterModule,
     PartCatalogModule,
     LeadModule,
+    OrganizationsModule,
   ],
   controllers: [InventoryController],
   providers: [InventoryService, InventoryRepository],

@@ -9,9 +9,11 @@ import * as fs from 'fs';
 import * as path from 'path';
 import * as Handlebars from 'handlebars';
 import puppeteer from 'puppeteer';
+import { isStaffUser, staffObjectId } from 'src/common/access/data-scope';
 import { AuthenticatedUser } from 'src/common/interface/authenticated-user.interface';
 import { sanitizeObject, validateObjectId } from 'src/common/utils/security.util';
 import { LotOutcomeStatus } from 'src/common/enum/lotOutcomeStatus.enum';
+import { utcDateWindow } from 'src/common/utils/date-range.util';
 import { LotPaymentStatus } from 'src/common/enum/lotPaymentStatus.enum';
 import {
   AuthorizationLetterStatus,
@@ -137,6 +139,7 @@ export class AuthorizationLetterService {
     const orgId = this.getOrgId(user);
     const auctions = await this.auctionRepo.findAllByFilter({
       organizationId: new Types.ObjectId(orgId),
+      ...(isStaffUser(user) ? { createdBy: staffObjectId(user) } : {}),
     });
     const existingLetters = await this.letterRepo.findAllByOrg(orgId);
     const letterAuctionIds = new Set(
@@ -193,6 +196,7 @@ export class AuthorizationLetterService {
     }
     const auction = await this.auctionRepo.findByOrgAndId(orgId, validatedAuctionId);
     if (!auction) throw new NotFoundException('Auction not found');
+    this.assertStaffOwnsAuction(auction, user);
     const lots = await this.lotRepo.findByAuction(orgId, validatedAuctionId);
     const eligible = this.isAuctionEligible(lots);
     return {
@@ -202,9 +206,26 @@ export class AuthorizationLetterService {
     };
   }
 
-  async list(user: AuthenticatedUser) {
+  async list(user: AuthenticatedUser, fromDate?: string, toDate?: string) {
     const orgId = this.getOrgId(user);
-    const letters = await this.letterRepo.findAllByOrg(orgId);
+    let letters = await this.letterRepo.findAllByOrg(orgId);
+    if (isStaffUser(user)) {
+      const ownedAuctionIds = await this.staffAuctionIds(user);
+      letters = letters.filter(
+        (letter) =>
+          ownedAuctionIds.has(letter.auctionId.toString()) ||
+          letter.createdBy?.toString() === user.userId,
+      );
+    }
+    const window = utcDateWindow(fromDate, toDate);
+    if (window) {
+      letters = letters.filter((letter) => {
+        const created = new Date((letter as { createdAt?: Date }).createdAt ?? 0);
+        if (window.$gte && created < window.$gte) return false;
+        if (window.$lt && created >= window.$lt) return false;
+        return true;
+      });
+    }
     return letters.sort((a, b) => {
       const aTime = new Date((a as { createdAt?: Date }).createdAt ?? 0).getTime();
       const bTime = new Date((b as { createdAt?: Date }).createdAt ?? 0).getTime();
@@ -217,6 +238,7 @@ export class AuthorizationLetterService {
     const letterId = validateObjectId(id, 'Letter ID');
     const letter = await this.letterRepo.findByOrgAndId(orgId, letterId);
     if (!letter) throw new NotFoundException('Authorization letter not found');
+    await this.assertStaffOwnsLetter(letter, user);
     return letter;
   }
 
@@ -232,6 +254,7 @@ export class AuthorizationLetterService {
 
     const auction = await this.auctionRepo.findByOrgAndId(orgId, auctionId);
     if (!auction) throw new NotFoundException('Auction not found');
+    this.assertStaffOwnsAuction(auction, user);
 
     const lots = await this.lotRepo.findByAuction(orgId, auctionId);
     if (!this.isAuctionEligible(lots)) {
@@ -291,6 +314,7 @@ export class AuthorizationLetterService {
     const letterId = validateObjectId(id, 'Letter ID');
     const letter = await this.letterRepo.findByOrgAndId(orgId, letterId);
     if (!letter) throw new NotFoundException('Authorization letter not found');
+    await this.assertStaffOwnsLetter(letter, user);
     if (letter.status !== AuthorizationLetterStatus.DRAFT) {
       throw new BadRequestException('Only draft letters can be edited');
     }
@@ -306,6 +330,7 @@ export class AuthorizationLetterService {
     const letterId = validateObjectId(id, 'Letter ID');
     const letter = await this.letterRepo.findByOrgAndId(orgId, letterId);
     if (!letter) throw new NotFoundException('Authorization letter not found');
+    await this.assertStaffOwnsLetter(letter, user);
     if (letter.status !== AuthorizationLetterStatus.DRAFT) {
       throw new BadRequestException('Only draft letters can be deleted');
     }
@@ -335,6 +360,7 @@ export class AuthorizationLetterService {
   }
 
   async renderHtml(user: AuthenticatedUser, id: string): Promise<string> {
+    await this.getById(user, id);
     const orgId = this.getOrgId(user);
     const letterId = validateObjectId(id, 'Letter ID');
     const context = await this.buildTemplateContext(letterId, orgId);
@@ -343,11 +369,38 @@ export class AuthorizationLetterService {
     return template(context);
   }
 
+  private assertStaffOwnsAuction(
+    auction: { createdBy?: { toString(): string } },
+    user: AuthenticatedUser,
+  ) {
+    if (isStaffUser(user) && auction.createdBy?.toString() !== user.userId) {
+      throw new NotFoundException('Auction not found');
+    }
+  }
+
+  private async staffAuctionIds(user: AuthenticatedUser) {
+    const auctions = await this.auctionRepo.findAllByFilter({
+      organizationId: new Types.ObjectId(this.getOrgId(user)),
+      createdBy: staffObjectId(user),
+    });
+    return new Set(auctions.map((auction) => auction._id.toString()));
+  }
+
+  private async assertStaffOwnsLetter(
+    letter: { createdBy?: { toString(): string }; auctionId: { toString(): string } },
+    user: AuthenticatedUser,
+  ) {
+    if (!isStaffUser(user)) return;
+    if (letter.createdBy?.toString() === user.userId) return;
+    const ownedAuctionIds = await this.staffAuctionIds(user);
+    if (ownedAuctionIds.has(letter.auctionId.toString())) return;
+    throw new NotFoundException('Authorization letter not found');
+  }
+
   async generatePdf(user: AuthenticatedUser, id: string): Promise<Buffer> {
     const orgId = this.getOrgId(user);
     const letterId = validateObjectId(id, 'Letter ID');
-    const letter = await this.letterRepo.findByOrgAndId(orgId, letterId);
-    if (!letter) throw new NotFoundException('Authorization letter not found');
+    const letter = await this.getById(user, id);
 
     const html = await this.renderHtml(user, id);
     const executablePath = process.env.PUPPETEER_EXECUTABLE_PATH;

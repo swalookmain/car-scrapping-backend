@@ -81,6 +81,8 @@ export class InventoryController {
         condition: query.condition,
         page: query.page,
         limit: query.limit,
+        fromDate: query.fromDate,
+        toDate: query.toDate,
       },
       authenticatedUser,
     );
@@ -99,6 +101,8 @@ export class InventoryController {
       limit: query.limit,
       search: query.search,
       organizationId: user.orgId || undefined,
+      fromDate: query.fromDate,
+      toDate: query.toDate,
     }, user);
   }
 

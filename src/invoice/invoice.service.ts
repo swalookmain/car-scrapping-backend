@@ -13,6 +13,7 @@ import { InvoiceCounterRepository } from './invoice-counter.repository';
 import { VehicleInvoiceRepository } from './vehicle-invoice.repository';
 import { PurchaseDocumentRepository } from './purchase-document.repository';
 import { OrganizationsService } from 'src/organizations/organizations.service';
+import { BooksPeriodService } from 'src/organizations/books-period.service';
 import { WINSTON_MODULE_NEST_PROVIDER } from 'nest-winston';
 import { Types } from 'mongoose';
 import type { LoggerService } from '@nestjs/common';
@@ -30,6 +31,7 @@ import { VechileInvoice } from './vechile-invoice.schema';
 import type { InvoiceDocument } from './invoice.schema';
 import { PaginatedResponse } from 'src/common/interface/paginated-response.interface';
 import { getPagination } from 'src/common/utils/pagination.util';
+import { dateWindowFilter } from 'src/common/utils/date-range.util';
 import { StorageService, UploadFile } from 'src/common/services/storage.service';
 import { UploadPurchaseDocumentDto } from './dto/upload-purchase-document.dto';
 import { SellerType } from 'src/common/enum/sellerType.enum';
@@ -75,6 +77,7 @@ export class InvoiceService {
       private readonly storageService: StorageService,
       @Inject(WINSTON_MODULE_NEST_PROVIDER)
       private readonly logger: LoggerService,
+      private readonly booksPeriodService: BooksPeriodService,
     ){}
 
     async createInvoice(createInvoiceDto: CreateInvoiceDto, authenticatedUser: AuthenticatedUser) {
@@ -116,6 +119,9 @@ export class InvoiceService {
           typeof purchaseDate === 'string' ? purchaseDate : undefined;
         const auctionDateValue =
           typeof auctionDate === 'string' ? auctionDate : undefined;
+        if (purchaseDateValue) {
+          await this.booksPeriodService.assertOpen(orgId, purchaseDateValue, 'Purchase date');
+        }
         const leadObjectId =
           typeof leadId === 'string' ? new Types.ObjectId(leadId) : undefined;
         const auctionObjectId =
@@ -290,6 +296,13 @@ export class InvoiceService {
           typeof normalizedData.vehicle_purchase_date === 'string'
             ? normalizedData.vehicle_purchase_date
             : undefined;
+        if (vehiclePurchaseDateValue) {
+          await this.booksPeriodService.assertOpen(
+            orgId,
+            vehiclePurchaseDateValue,
+            'Vehicle purchase date',
+          );
+        }
         const vehicleType =
           (normalizedData.vehicle_type as VehicleType) || VehicleType.CAR;
         const formVehicleClass: FormVehicleClass =
@@ -443,6 +456,14 @@ export class InvoiceService {
           typeof purchaseDate === 'string' ? purchaseDate : undefined;
         const auctionDateValue =
           typeof auctionDate === 'string' ? auctionDate : undefined;
+        const effectivePurchaseDate = purchaseDateValue ?? invoice.purchaseDate;
+        if (effectivePurchaseDate) {
+          await this.booksPeriodService.assertOpen(
+            orgId,
+            effectivePurchaseDate,
+            'Purchase date',
+          );
+        }
         const updateFields = {
           ...restData,
           organizationId: new Types.ObjectId(orgId),
@@ -492,6 +513,7 @@ export class InvoiceService {
             taxableAmount: updatedInvoice.taxableAmount,
             totalTaxAmount: updatedInvoice.totalTaxAmount,
             reverseChargeApplicable: updatedInvoice.reverseChargeApplicable,
+            entryDate: updatedInvoice.purchaseDate,
           });
           await this.syncYardAfterConfirm(invoiceId, authenticatedUser);
         }
@@ -523,7 +545,7 @@ export class InvoiceService {
         }
         return updatedInvoice;
       } catch (error) {
-        if(error instanceof NotFoundException) {
+        if(error instanceof NotFoundException || error instanceof BadRequestException) {
           throw error;
         }
         const errorMessage = error instanceof Error ? error.message : 'Unknown error';
@@ -562,6 +584,13 @@ export class InvoiceService {
           typeof vehicle_purchase_date === 'string'
             ? vehicle_purchase_date
             : undefined;
+        if (vehiclePurchaseDateValue) {
+          await this.booksPeriodService.assertOpen(
+            orgId,
+            vehiclePurchaseDateValue,
+            'Vehicle purchase date',
+          );
+        }
         const updateData: Partial<VechileInvoice> = {
           ...normalizedData,
           organizationId: new Types.ObjectId(orgId),
@@ -636,6 +665,8 @@ export class InvoiceService {
       authenticatedUser: AuthenticatedUser,
       page = 1,
       limit = 10,
+      fromDate?: string,
+      toDate?: string,
     ): Promise<PaginatedResponse<any>>
     {
       try {
@@ -649,6 +680,7 @@ export class InvoiceService {
               isDeleted: { $ne: true },
             },
             staffFilter,
+            dateWindowFilter('purchaseDate', fromDate, toDate),
           ),
           safePage,
           safeLimit,

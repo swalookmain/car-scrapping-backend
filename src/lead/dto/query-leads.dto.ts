@@ -1,5 +1,6 @@
 import { ApiPropertyOptional } from '@nestjs/swagger';
 import {
+  IsDateString,
   IsEnum,
   IsMongoId,
   IsNumberString,
@@ -33,4 +34,14 @@ export class QueryLeadsDto {
   @IsMongoId()
   @IsOptional()
   assignedTo?: string;
+
+  @ApiPropertyOptional({ example: '2024-04-01' })
+  @IsOptional()
+  @IsDateString()
+  fromDate?: string;
+
+  @ApiPropertyOptional({ example: '2026-03-31' })
+  @IsOptional()
+  @IsDateString()
+  toDate?: string;
 }

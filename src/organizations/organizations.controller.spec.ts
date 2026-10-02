@@ -3,6 +3,8 @@ import { OrganizationsController } from './organizations.controller';
 import { OrganizationsService } from './organizations.service';
 import { SubscriptionService } from '../subscription/subscription.service';
 import { OrganizationLetterSettingsService } from './organization-letter-settings.service';
+import { OrganizationFacilitySettingsService } from './organization-facility-settings.service';
+import { BooksPeriodService } from './books-period.service';
 
 describe('OrganizationsController', () => {
   let controller: OrganizationsController;
@@ -14,6 +16,8 @@ describe('OrganizationsController', () => {
         { provide: OrganizationsService, useValue: {} },
         { provide: SubscriptionService, useValue: {} },
         { provide: OrganizationLetterSettingsService, useValue: {} },
+        { provide: OrganizationFacilitySettingsService, useValue: {} },
+        { provide: BooksPeriodService, useValue: {} },
       ],
     }).compile();
 

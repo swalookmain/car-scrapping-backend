@@ -15,8 +15,10 @@ import { InventoryRepository } from 'src/inventory/inventory.repository';
 import { VehicleComplianceRepository } from 'src/vehicle-compliance/vehicle-compliance.repository';
 import { VehicleInvoiceRepository } from 'src/invoice/vehicle-invoice.repository';
 import type { AuthenticatedUser } from 'src/common/interface/authenticated-user.interface';
+import { isStaffUser, staffObjectId } from 'src/common/access/data-scope';
 import { sanitizeObject, validateObjectId } from 'src/common/utils/security.util';
 import { getPagination } from 'src/common/utils/pagination.util';
+import { dateWindowFilter } from 'src/common/utils/date-range.util';
 import type { PaginatedResponse } from 'src/common/interface/paginated-response.interface';
 import { Condition } from 'src/common/enum/condition.enum';
 import { Status } from 'src/common/enum/status.enum';
@@ -38,6 +40,7 @@ import { GstAuditService } from 'src/tax-compliance/gst-audit.service';
 import { InvoiceType } from 'src/common/enum/invoiceType.enum';
 import { GstAuditEventType } from 'src/common/enum/gstAuditEventType.enum';
 import { LedgerService } from 'src/accounting/services/ledger.service';
+import { BooksPeriodService } from 'src/organizations/books-period.service';
 import { BuyerType } from 'src/common/enum/buyerType.enum';
 
 type InventoryLike = {
@@ -61,6 +64,7 @@ type SalesInvoiceWithBuyer = Record<string, unknown> & {
   reverseChargeApplicable: boolean;
   placeOfSupplyState: string;
   status: SalesInvoiceStatus;
+  invoiceDate: Date;
   totalAmount: number;
   taxableAmount: number;
   totalTaxAmount: number;
@@ -99,6 +103,7 @@ export class SalesDispatchService {
     private readonly ledgerService: LedgerService,
     @Inject(WINSTON_MODULE_NEST_PROVIDER)
     private readonly logger: LoggerService,
+    private readonly booksPeriodService: BooksPeriodService,
   ) {}
 
   async createBuyer(
@@ -128,6 +133,7 @@ export class SalesDispatchService {
     if (query.buyerName) {
       filter.buyerName = { $regex: query.buyerName, $options: 'i' };
     }
+    Object.assign(filter, dateWindowFilter('createdAt', query.fromDate, query.toDate) ?? {});
 
     const { page, limit } = getPagination(query.page, query.limit);
     const { data, total } = await this.buyerRepository.findPaginated(
@@ -212,6 +218,11 @@ export class SalesDispatchService {
         placeOfSupplyState: sanitizedData.placeOfSupplyState,
       });
 
+      await this.booksPeriodService.assertOpen(
+        orgId,
+        sanitizedData.invoiceDate,
+        'Invoice date',
+      );
       const invoice = await this.salesInvoiceRepository.create({
         organizationId: new Types.ObjectId(orgId),
         invoiceNumber: sanitizedData.invoiceNumber,
@@ -298,6 +309,9 @@ export class SalesDispatchService {
     const filter: Record<string, unknown> = {
       organizationId: new Types.ObjectId(orgId),
     };
+    if (isStaffUser(authenticatedUser)) {
+      filter.createdBy = staffObjectId(authenticatedUser);
+    }
     if (query.buyerId) {
       filter.buyerId = new Types.ObjectId(validateObjectId(query.buyerId, 'Buyer ID'));
     }
@@ -307,6 +321,7 @@ export class SalesDispatchService {
     if (query.invoiceNumber) {
       filter.invoiceNumber = { $regex: query.invoiceNumber, $options: 'i' };
     }
+    Object.assign(filter, dateWindowFilter('invoiceDate', query.fromDate, query.toDate) ?? {});
 
     const { page, limit } = getPagination(query.page, query.limit);
     const { data, total } = await this.salesInvoiceRepository.findPaginated(
@@ -363,6 +378,12 @@ export class SalesDispatchService {
     if (!invoice) {
       throw new NotFoundException('Sales invoice not found');
     }
+    if (
+      isStaffUser(authenticatedUser) &&
+      invoice.createdBy?.toString() !== authenticatedUser.userId
+    ) {
+      throw new NotFoundException('Sales invoice not found');
+    }
     const buyer = await this.buyerRepository.findByOrgAndId(
       orgId,
       invoice.buyerId.toString(),
@@ -385,6 +406,7 @@ export class SalesDispatchService {
       reverseChargeApplicable: invoice.reverseChargeApplicable,
       placeOfSupplyState: invoice.placeOfSupplyState,
       status: invoice.status,
+      invoiceDate: invoice.invoiceDate,
       totalAmount: invoice.totalAmount,
       taxableAmount: invoice.taxableAmount,
       totalTaxAmount: invoice.totalTaxAmount,
@@ -416,6 +438,14 @@ export class SalesDispatchService {
     const sanitizedData = sanitizeObject(
       updateSalesInvoiceDto,
     ) as UpdateSalesInvoiceDto;
+    const effectiveInvoiceDate = sanitizedData.invoiceDate ?? existing.invoice.invoiceDate;
+    if (effectiveInvoiceDate) {
+      await this.booksPeriodService.assertOpen(
+        this.getOrgId(authenticatedUser),
+        effectiveInvoiceDate,
+        'Invoice date',
+      );
+    }
     const updatePayload: Record<string, unknown> = {};
 
     if (sanitizedData.buyerId) {
@@ -535,6 +565,11 @@ export class SalesDispatchService {
       if (existing.invoice.status !== SalesInvoiceStatus.DRAFT) {
         throw new BadRequestException('Only draft sales invoices can be confirmed');
       }
+      await this.booksPeriodService.assertOpen(
+        this.getOrgId(authenticatedUser),
+        existing.invoice.invoiceDate,
+        'Invoice date',
+      );
       if (!existing.items.length) {
         throw new BadRequestException('Cannot confirm invoice without items');
       }
@@ -637,6 +672,7 @@ export class SalesDispatchService {
         totalAmount: existing.invoice.totalAmount,
         taxableAmount: existing.invoice.taxableAmount,
         totalTaxAmount: existing.invoice.totalTaxAmount,
+        entryDate: existing.invoice.invoiceDate,
       });
 
       return this.getSalesInvoiceById(existing.invoice._id.toString(), authenticatedUser);

@@ -7,6 +7,7 @@ import {
   Param,
   Patch,
   Post,
+  Query,
   Res,
   UseGuards,
 } from '@nestjs/common';
@@ -28,6 +29,7 @@ import { CreateAuthorizationLetterDto } from './dto/create-authorization-letter.
 import { UpdateAuthorizationLetterDto } from './dto/update-authorization-letter.dto';
 import { SetModule } from 'src/common/decorators/set-module.decorator';
 import { APP_MODULES } from 'src/common/access/app-modules';
+import { DateRangeQueryDto } from 'src/common/dto/date-range-query.dto';
 
 @ApiTags('Authorization Letters')
 @ApiBearerAuth()
@@ -42,8 +44,11 @@ export class AuthorizationLetterController {
   @Get()
   @Roles(Role.ADMIN, Role.STAFF)
   @ApiOperation({ summary: 'List authorization letters' })
-  list(@GetUser() user: AuthenticatedUser) {
-    return this.authorizationLetterService.list(user);
+  list(
+    @GetUser() user: AuthenticatedUser,
+    @Query() query: DateRangeQueryDto,
+  ) {
+    return this.authorizationLetterService.list(user, query.fromDate, query.toDate);
   }
 
   @Get('eligible-auctions')

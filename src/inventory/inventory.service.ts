@@ -22,6 +22,7 @@ import { sanitizeObject, validateObjectId } from 'src/common/utils/security.util
 import { AuthenticatedUser } from 'src/common/interface/authenticated-user.interface';
 import { PaginatedResponse } from 'src/common/interface/paginated-response.interface';
 import { getPagination } from 'src/common/utils/pagination.util';
+import { dateWindowFilter } from 'src/common/utils/date-range.util';
 import type { Inventory } from './inventory.schema';
 import { YardService } from 'src/yard/yard.service';
 import { normalizePartType } from 'src/common/utils/part-type.util';
@@ -32,6 +33,7 @@ import { WeightUnit } from 'src/common/enum/weightUnit.enum';
 import { StateOfMatter } from 'src/common/enum/stateOfMatter.enum';
 import { MatterClass } from 'src/common/enum/matterClass.enum';
 import { LeadService } from 'src/lead/lead.service';
+import { BooksPeriodService } from 'src/organizations/books-period.service';
 import {
   andMongoFilters,
   isStaffUser,
@@ -53,6 +55,7 @@ export class InventoryService {
     private readonly leadService: LeadService,
     @Inject(WINSTON_MODULE_NEST_PROVIDER)
     private readonly logger: LoggerService,
+    private readonly booksPeriodService: BooksPeriodService,
   ) {}
 
   async createBatch(
@@ -105,6 +108,19 @@ export class InventoryService {
 
       const vechileModel =
         (vechileInvoice as { model_name?: string }).model_name ?? 'UNKNOWN';
+      const purchaseDate = (invoice as { purchaseDate?: Date }).purchaseDate;
+      let businessDate: Date | undefined;
+      if (sanitizedData.dismantledAt) {
+        await this.booksPeriodService.assertOpen(
+          resolvedOrgId,
+          sanitizedData.dismantledAt,
+          'Dismantle date',
+        );
+        businessDate = new Date(sanitizedData.dismantledAt);
+      } else if (purchaseDate) {
+        businessDate = purchaseDate;
+        await this.booksPeriodService.assertOpen(resolvedOrgId, businessDate, 'Inventory date');
+      }
 
       const parts = sanitizedData.parts ?? [];
       const records = await Promise.all(
@@ -184,6 +200,7 @@ export class InventoryService {
             condition: part.condition,
             status,
             unitPrice: part.unitPrice,
+            ...(businessDate ? { businessDate } : {}),
             ...massFields,
             documents: this.normalizeDocuments(part.documents, authenticatedUser),
             createdBy: new Types.ObjectId(authenticatedUser.userId),
@@ -193,7 +210,11 @@ export class InventoryService {
 
       const created = await this.inventoryRepo.createMany(records);
       if (!existingParts) {
-        await this.yardService.completeDismantling(vechileId, authenticatedUser);
+        await this.yardService.completeDismantling(
+          vechileId,
+          authenticatedUser,
+          sanitizedData.dismantledAt,
+        );
       }
       return created;
     } catch (error) {
@@ -215,6 +236,8 @@ export class InventoryService {
       condition?: Condition;
       page?: number;
       limit?: number;
+      fromDate?: string;
+      toDate?: string;
     },
     authenticatedUser: AuthenticatedUser,
   ): Promise<PaginatedResponse<Inventory> | Inventory[]> {
@@ -239,6 +262,10 @@ export class InventoryService {
     if (filters.condition) {
       filter.condition = filters.condition;
     }
+    Object.assign(
+      filter,
+      dateWindowFilter('businessDate', filters.fromDate, filters.toDate, 'createdAt') ?? {},
+    );
 
     if (filters.page !== undefined && filters.limit !== undefined) {
       const { page: safePage, limit: safeLimit } = getPagination(
@@ -420,6 +447,8 @@ export class InventoryService {
       limit?: number;
       search?: string;
       organizationId?: string;
+      fromDate?: string;
+      toDate?: string;
     },
     authenticatedUser: AuthenticatedUser,
   ) {
@@ -434,6 +463,8 @@ export class InventoryService {
       search: filters.search,
       organizationId: filters.organizationId,
       invoiceIds,
+      fromDate: filters.fromDate,
+      toDate: filters.toDate,
     });
   }
 

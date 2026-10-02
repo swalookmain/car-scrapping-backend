@@ -118,8 +118,23 @@ export class InventoryAuditService {
     const yardInRange = await this.yardVehicleModel
       .find({
         organizationId: orgOid,
-        dismantledAt: { $gte: from, $lte: to },
         vehicleInvoiceId: { $exists: true, $ne: null },
+        $and: [
+          {
+            $or: [
+              { dismantledAt: { $exists: true, $ne: null } },
+              { currentStatus: YardVehicleStatus.DISMANTLED },
+            ],
+          },
+          {
+            $expr: {
+              $and: [
+                { $gte: [{ $ifNull: ['$dismantledAt', '$createdAt'] }, from] },
+                { $lte: [{ $ifNull: ['$dismantledAt', '$createdAt'] }, to] },
+              ],
+            },
+          },
+        ],
       })
       .select('vehicleInvoiceId dismantledAt currentStatus')
       .lean();
@@ -144,7 +159,12 @@ export class InventoryAuditService {
         $match: {
           'vehicle.organizationId': orgOid,
           'vehicle.isDeleted': { $ne: true },
-          createdAt: { $gte: from, $lte: to },
+          $expr: {
+            $and: [
+              { $gte: [{ $ifNull: ['$businessDate', '$createdAt'] }, from] },
+              { $lte: [{ $ifNull: ['$businessDate', '$createdAt'] }, to] },
+            ],
+          },
         },
       },
       {
@@ -156,7 +176,7 @@ export class InventoryAuditService {
           },
           weightKg: { $sum: { $ifNull: ['$weightKg', 0] } },
           partCount: { $sum: 1 },
-          firstCreatedAt: { $min: '$createdAt' },
+          firstCreatedAt: { $min: { $ifNull: ['$businessDate', '$createdAt'] } },
         },
       },
     ]);

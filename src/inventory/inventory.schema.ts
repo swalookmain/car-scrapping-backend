@@ -124,6 +124,10 @@ export class Inventory extends Document {
   @Prop({ type: [InventoryAttachment], default: [] })
   documents?: InventoryAttachment[];
 
+  /** Purchase or dismantle date used by FORM-3. Missing rows keep using createdAt. */
+  @Prop({ type: Date })
+  businessDate?: Date;
+
   @Prop({ type: Types.ObjectId, ref: 'User', required: true })
   createdBy: Types.ObjectId;
 

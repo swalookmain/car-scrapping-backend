@@ -13,6 +13,7 @@ import { LeadRepository } from './lead.repository';
 import { LeadDocumentRepository } from './lead-document.repository';
 import { UsersRepository } from 'src/users/users.repository';
 import { OrganizationsService } from 'src/organizations/organizations.service';
+import { BooksPeriodService } from 'src/organizations/books-period.service';
 import { AuthenticatedUser } from 'src/common/interface/authenticated-user.interface';
 import { CreateLeadDto } from './dto/create-lead.dto';
 import { UpdateLeadDto } from './dto/update-lead.dto';
@@ -22,6 +23,7 @@ import { QueryLeadsDto } from './dto/query-leads.dto';
 import { LeadLookupQueryDto } from './dto/lead-lookup-query.dto';
 import { UploadLeadDocumentDto } from './dto/upload-lead-document.dto';
 import { getPagination } from 'src/common/utils/pagination.util';
+import { dateWindowFilter } from 'src/common/utils/date-range.util';
 import { sanitizeObject, validateObjectId } from 'src/common/utils/security.util';
 import { assertSupportedDocumentFile } from 'src/common/utils/document-upload.util';
 import { LeadStatus } from 'src/common/enum/leadStatus.enum';
@@ -57,6 +59,7 @@ export class LeadService {
     private readonly liftingService: LiftingService,
     @Inject(WINSTON_MODULE_NEST_PROVIDER)
     private readonly logger: LoggerService,
+    private readonly booksPeriodService: BooksPeriodService,
   ) {}
 
   async createLead(
@@ -72,6 +75,9 @@ export class LeadService {
       );
       const { purchaseDate, assignedTo: requestedAssignee, ...restData } =
         sanitizedData;
+      if (purchaseDate) {
+        await this.booksPeriodService.assertOpen(orgId, purchaseDate, 'Lead date');
+      }
 
       const assignedStaffId =
         authenticatedUser.role === Role.STAFF
@@ -135,6 +141,7 @@ export class LeadService {
         base,
         staffLeadOwnerFilter(authenticatedUser),
         search,
+        dateWindowFilter('purchaseDate', query.fromDate, query.toDate, 'createdAt'),
       );
 
       const { page, limit } = getPagination(
@@ -213,6 +220,14 @@ export class LeadService {
       delete sanitizedData.assignedTo;
 
       this.assertOfferCompleteForLaterSteps(lead, sanitizedData);
+      const leadDate = sanitizedData.purchaseDate ?? lead.purchaseDate;
+      if (leadDate) {
+        await this.booksPeriodService.assertOpen(
+          this.getOrgId(authenticatedUser),
+          leadDate,
+          'Lead date',
+        );
+      }
 
       const nextOffer =
         sanitizedData.offerAmount ?? lead.offerAmount;

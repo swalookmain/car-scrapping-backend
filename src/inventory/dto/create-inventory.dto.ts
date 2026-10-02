@@ -148,6 +148,13 @@ export class InventoryDocumentDto {
 }
 
 export class CreateInventoryBatchDto {
+  @ApiPropertyOptional({
+    description: 'Dismantle date (YYYY-MM-DD). Omit to stamp the current time.',
+  })
+  @IsDateString()
+  @IsOptional()
+  dismantledAt?: string;
+
   @ApiProperty({ description: 'Invoice ID' })
   @IsMongoId()
   invoiceId: string;

@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, OnModuleInit } from '@nestjs/common';
 import { Types } from 'mongoose';
 import { LedgerReferenceType } from 'src/common/enum/ledgerReferenceType.enum';
 import { ChartOfAccountsService } from './chart-of-accounts.service';
@@ -11,6 +11,7 @@ export interface PurchaseInvoiceForLedger {
   taxableAmount: number;
   totalTaxAmount: number;
   reverseChargeApplicable: boolean;
+  entryDate: Date;
 }
 
 /** Sales invoice: total, taxable, tax */
@@ -20,16 +21,21 @@ export interface SalesInvoiceForLedger {
   totalAmount: number;
   taxableAmount: number;
   totalTaxAmount: number;
+  entryDate: Date;
 }
 
 const round2 = (n: number) => Math.round(n * 100) / 100;
 
 @Injectable()
-export class LedgerService {
+export class LedgerService implements OnModuleInit {
   constructor(
     private readonly chartOfAccountsService: ChartOfAccountsService,
     private readonly ledgerEntryRepository: LedgerEntryRepository,
   ) {}
+
+  async onModuleInit() {
+    await this.ledgerEntryRepository.backfillMissingEntryDates();
+  }
 
   /**
    * Posts a confirmed purchase invoice to the ledger (double-entry).
@@ -58,7 +64,9 @@ export class LedgerService {
       creditAmount: number;
       referenceType: LedgerReferenceType;
       referenceId: Types.ObjectId;
+      entryDate: Date;
     }> = [];
+    const entryDate = invoice.entryDate;
 
     if (invoice.reverseChargeApplicable) {
       const payableToSupplier = taxable;
@@ -72,6 +80,7 @@ export class LedgerService {
           creditAmount: 0,
           referenceType: LedgerReferenceType.PURCHASE_INVOICE,
           referenceId: invoice._id,
+          entryDate,
         },
         {
           organizationId: orgId,
@@ -80,6 +89,7 @@ export class LedgerService {
           creditAmount: payableToSupplier,
           referenceType: LedgerReferenceType.PURCHASE_INVOICE,
           referenceId: invoice._id,
+          entryDate,
         },
         {
           organizationId: orgId,
@@ -88,6 +98,7 @@ export class LedgerService {
           creditAmount: rcmLiability,
           referenceType: LedgerReferenceType.PURCHASE_INVOICE,
           referenceId: invoice._id,
+          entryDate,
         },
       );
     } else {
@@ -100,6 +111,7 @@ export class LedgerService {
           creditAmount: 0,
           referenceType: LedgerReferenceType.PURCHASE_INVOICE,
           referenceId: invoice._id,
+          entryDate,
         },
         {
           organizationId: orgId,
@@ -108,6 +120,7 @@ export class LedgerService {
           creditAmount: 0,
           referenceType: LedgerReferenceType.PURCHASE_INVOICE,
           referenceId: invoice._id,
+          entryDate,
         },
         {
           organizationId: orgId,
@@ -116,6 +129,7 @@ export class LedgerService {
           creditAmount: totalPayable,
           referenceType: LedgerReferenceType.PURCHASE_INVOICE,
           referenceId: invoice._id,
+          entryDate,
         },
       );
     }
@@ -145,6 +159,7 @@ export class LedgerService {
     const taxable = round2(invoice.taxableAmount);
     const tax = round2(invoice.totalTaxAmount);
 
+    const entryDate = invoice.entryDate;
     const entries = [
       {
         organizationId: orgId,
@@ -153,6 +168,7 @@ export class LedgerService {
         creditAmount: 0,
         referenceType: LedgerReferenceType.SALES_INVOICE,
         referenceId: invoice._id,
+        entryDate,
       },
       {
         organizationId: orgId,
@@ -161,6 +177,7 @@ export class LedgerService {
         creditAmount: taxable,
         referenceType: LedgerReferenceType.SALES_INVOICE,
         referenceId: invoice._id,
+        entryDate,
       },
       {
         organizationId: orgId,
@@ -169,6 +186,7 @@ export class LedgerService {
         creditAmount: tax,
         referenceType: LedgerReferenceType.SALES_INVOICE,
         referenceId: invoice._id,
+        entryDate,
       },
     ];
 

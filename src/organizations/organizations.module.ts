@@ -17,6 +17,12 @@ import {
 } from './organization-facility-settings.schema';
 import { OrganizationFacilitySettingsRepository } from './organization-facility-settings.repository';
 import { OrganizationFacilitySettingsService } from './organization-facility-settings.service';
+import {
+  OrganizationBooksSettings,
+  OrganizationBooksSettingsSchema,
+} from './organization-books-settings.schema';
+import { OrganizationBooksSettingsRepository } from './organization-books-settings.repository';
+import { BooksPeriodService } from './books-period.service';
 
 @Module({
   imports: [
@@ -30,6 +36,10 @@ import { OrganizationFacilitySettingsService } from './organization-facility-set
         name: OrganizationFacilitySettings.name,
         schema: OrganizationFacilitySettingsSchema,
       },
+      {
+        name: OrganizationBooksSettings.name,
+        schema: OrganizationBooksSettingsSchema,
+      },
     ]),
     forwardRef(() => SubscriptionModule),
   ],
@@ -41,6 +51,8 @@ import { OrganizationFacilitySettingsService } from './organization-facility-set
     OrganizationLetterSettingsService,
     OrganizationFacilitySettingsRepository,
     OrganizationFacilitySettingsService,
+    OrganizationBooksSettingsRepository,
+    BooksPeriodService,
   ],
   exports: [
     OrganizationsService,
@@ -49,6 +61,7 @@ import { OrganizationFacilitySettingsService } from './organization-facility-set
     OrganizationLetterSettingsRepository,
     OrganizationFacilitySettingsService,
     OrganizationFacilitySettingsRepository,
+    BooksPeriodService,
   ],
 })
 export class OrganizationsModule {}

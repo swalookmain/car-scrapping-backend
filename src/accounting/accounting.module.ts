@@ -20,6 +20,7 @@ import { LedgerService } from './services/ledger.service';
 import { AccountingController } from './accounting.controller';
 import { PnlService } from './services/pnl.service';
 import { InvoicePaymentService } from './services/invoice-payment.service';
+import { OrganizationsModule } from 'src/organizations/organizations.module';
 
 @Module({
   imports: [
@@ -28,6 +29,7 @@ import { InvoicePaymentService } from './services/invoice-payment.service';
       { name: LedgerEntry.name, schema: LedgerEntrySchema },
       { name: InvoicePaymentRecord.name, schema: InvoicePaymentRecordSchema },
     ]),
+    OrganizationsModule,
   ],
   controllers: [AccountingController],
   providers: [

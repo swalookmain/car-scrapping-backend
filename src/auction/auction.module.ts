@@ -18,6 +18,7 @@ import { Invoice, InvoiceSchema } from 'src/invoice/invoice.schema';
 import { InvoiceRepository } from 'src/invoice/invoice.repository';
 import { AuctionVehicleDocumentRepository } from './auction-vehicle-document.repository';
 import { NotificationModule } from 'src/notification/notification.module';
+import { OrganizationsModule } from 'src/organizations/organizations.module';
 import { LifecycleController } from './lifecycle/lifecycle.controller';
 import { LifecycleService } from './lifecycle/lifecycle.service';
 import { LifecycleStateService } from './lifecycle/lifecycle-state.service';
@@ -31,6 +32,7 @@ import { LotDocumentRepository } from './lifecycle/repositories/lot-document.rep
 @Module({
   imports: [
     NotificationModule,
+    OrganizationsModule,
     MongooseModule.forFeature([
       { name: Auction.name, schema: AuctionSchema },
       { name: AuctionLot.name, schema: AuctionLotSchema },

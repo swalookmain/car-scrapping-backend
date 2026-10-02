@@ -67,6 +67,7 @@ describe('LeadService close / invoice / offer', () => {
       yardService as never,
       liftingService as never,
       { error: jest.fn(), log: jest.fn(), warn: jest.fn() } as never,
+      { assertOpen: jest.fn().mockResolvedValue(undefined) } as never,
     );
   });
 
@@ -86,7 +87,7 @@ describe('LeadService close / invoice / offer', () => {
       admin,
     );
 
-    expect(result.status).toBe(LeadStatus.CLOSED);
+    expect(result?.status).toBe(LeadStatus.CLOSED);
     expect(yardService.ensureYardEntryForLead).toHaveBeenCalled();
     expect(liftingService.createForClosedLead).toHaveBeenCalled();
   });

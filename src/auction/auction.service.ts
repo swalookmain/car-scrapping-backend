@@ -19,6 +19,7 @@ import { AuctionVehicleRepository } from './auction-vehicle.repository';
 import { CreateAuctionVehicleDto } from './dto/create-auction-vehicle.dto';
 import { UpdateAuctionVehicleDto } from './dto/update-auction-vehicle.dto';
 import { getPagination } from 'src/common/utils/pagination.util';
+import { dateWindowFilter } from 'src/common/utils/date-range.util';
 import { InvoiceRepository } from 'src/invoice/invoice.repository';
 import { SellerType } from 'src/common/enum/sellerType.enum';
 import { AuctionCounterRepository } from './auction-counter.repository';
@@ -279,11 +280,14 @@ export class AuctionService implements OnModuleInit {
     page = 1,
     limit = 10,
     status?: AuctionStatus,
+    fromDate?: string,
+    toDate?: string,
   ) {
     const orgId = this.getOrgId(authenticatedUser);
     const { page: safePage, limit: safeLimit } = getPagination(page, limit);
     const filter: Record<string, unknown> = {
       organizationId: new Types.ObjectId(orgId),
+      ...(dateWindowFilter('auctionDate', fromDate, toDate) ?? {}),
     };
     if (isStaffUser(authenticatedUser)) {
       filter.createdBy = staffObjectId(authenticatedUser);

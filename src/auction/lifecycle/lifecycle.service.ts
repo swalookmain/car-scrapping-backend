@@ -28,6 +28,7 @@ import { LotPaymentRecordRepository } from './repositories/lot-payment-record.re
 import { LotLifecycleEventRepository } from './repositories/lot-lifecycle-event.repository';
 import { LotDocumentRepository } from './repositories/lot-document.repository';
 import { LotPaymentRecordType } from './schemas/lot-payment-record.schema';
+import { BooksPeriodService } from 'src/organizations/books-period.service';
 
 @Injectable()
 export class LifecycleService {
@@ -40,6 +41,7 @@ export class LifecycleService {
     private readonly lotDocumentRepository: LotDocumentRepository,
     private readonly notificationService: NotificationService,
     private readonly storageService: StorageService,
+    private readonly booksPeriodService: BooksPeriodService,
   ) {}
 
   private getOrgId(user: AuthenticatedUser) {
@@ -221,6 +223,17 @@ export class LifecycleService {
           item.totalAmount,
           preEmd,
         );
+        if (item.dealClosedAt) {
+          await this.booksPeriodService.assertOpen(orgId, item.dealClosedAt, 'Deal closed date');
+        }
+        if (item.paymentDueDate) {
+          await this.booksPeriodService.assertOpen(
+            orgId,
+            item.paymentDueDate,
+            'Payment due date',
+            { allowFuture: true },
+          );
+        }
         const paymentDueDate = item.paymentDueDate
           ? new Date(item.paymentDueDate)
           : this.lifecycleStateService.defaultPaymentDueDate();
@@ -293,6 +306,9 @@ export class LifecycleService {
     );
     const currentPaid = lot.payment?.amountPaidTotal ?? 0;
     const sanitized = sanitizeObject(dto) as CreateLotPaymentDto;
+    if (sanitized.transferDate) {
+      await this.booksPeriodService.assertOpen(orgId, sanitized.transferDate, 'Transfer date');
+    }
 
     if (currentPaid + sanitized.amountPaid > amountDue) {
       throw new BadRequestException('Payment exceeds outstanding balance');
@@ -427,6 +443,9 @@ export class LifecycleService {
     }
 
     const sanitized = sanitizeObject(dto) as UpdateAcceptanceLetterDto;
+    if (sanitized.receivedDate) {
+      await this.booksPeriodService.assertOpen(orgId, sanitized.receivedDate, 'Received date');
+    }
     if (sanitized.received) {
       if (!sanitized.letterNumber || !sanitized.receivedDate) {
         throw new BadRequestException('Letter number and received date are required');
@@ -472,15 +491,25 @@ export class LifecycleService {
 
     const sanitized = sanitizeObject(dto) as UpdateLotDeliveryDto;
     if (sanitized.lastLiftingDate) {
-      try {
-        this.lifecycleStateService.assertFutureDate(
+      const books = await this.booksPeriodService.getView(orgId);
+      if (books.booksStartDate) {
+        await this.booksPeriodService.assertOpen(
+          orgId,
           sanitized.lastLiftingDate,
           'Last lifting date',
+          { allowFuture: true },
         );
-      } catch (e) {
-        throw new BadRequestException(
-          e instanceof Error ? e.message : 'Invalid lifting date',
-        );
+      } else {
+        try {
+          this.lifecycleStateService.assertFutureDate(
+            sanitized.lastLiftingDate,
+            'Last lifting date',
+          );
+        } catch (e) {
+          throw new BadRequestException(
+            e instanceof Error ? e.message : 'Invalid lifting date',
+          );
+        }
       }
     }
 
@@ -560,6 +589,7 @@ export class LifecycleService {
     if (!gatePassDate) {
       throw new BadRequestException('Gate pass date is required');
     }
+    await this.booksPeriodService.assertOpen(orgId, gatePassDate, 'Gate pass date');
 
     let documentId = lot.gatePass?.documentId;
     if (file) {
@@ -642,6 +672,13 @@ export class LifecycleService {
     }
 
     const sanitized = sanitizeObject(dto) as UpdateLotRcmDto;
+    if (sanitized.transactionDate) {
+      await this.booksPeriodService.assertOpen(
+        orgId,
+        sanitized.transactionDate,
+        'Transaction date',
+      );
+    }
     const transactionDate = sanitized.transactionDate
       ? new Date(`${sanitized.transactionDate}T00:00:00.000Z`)
       : undefined;
