@@ -99,13 +99,4 @@ export class LifecycleStateService {
     date.setHours(23, 59, 59, 999);
     return date;
   }
-
-  assertFutureDate(dateStr: string, fieldName: string) {
-    const date = new Date(dateStr);
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-    if (date <= today) {
-      throw new Error(`${fieldName} must be a future date`);
-    }
-  }
 }

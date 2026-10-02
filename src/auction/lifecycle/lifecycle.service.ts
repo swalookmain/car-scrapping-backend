@@ -491,26 +491,12 @@ export class LifecycleService {
 
     const sanitized = sanitizeObject(dto) as UpdateLotDeliveryDto;
     if (sanitized.lastLiftingDate) {
-      const books = await this.booksPeriodService.getView(orgId);
-      if (books.booksStartDate) {
-        await this.booksPeriodService.assertOpen(
-          orgId,
-          sanitized.lastLiftingDate,
-          'Last lifting date',
-          { allowFuture: true },
-        );
-      } else {
-        try {
-          this.lifecycleStateService.assertFutureDate(
-            sanitized.lastLiftingDate,
-            'Last lifting date',
-          );
-        } catch (e) {
-          throw new BadRequestException(
-            e instanceof Error ? e.message : 'Invalid lifting date',
-          );
-        }
-      }
+      await this.booksPeriodService.assertOpen(
+        orgId,
+        sanitized.lastLiftingDate,
+        'Last lifting date',
+        { allowFuture: true },
+      );
     }
 
     const existingDelivery = lot.delivery || {
