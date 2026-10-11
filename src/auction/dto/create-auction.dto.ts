@@ -13,8 +13,11 @@ import {
 } from 'class-validator';
 
 const toOptionalString = (value: unknown): string | undefined => {
-  if (value === '' || value === null || value === undefined) return undefined;
-  if (typeof value === 'string') return value;
+  if (value === null || value === undefined) return undefined;
+  if (typeof value === 'string') {
+    const trimmed = value.trim();
+    return trimmed === '' ? undefined : trimmed;
+  }
   if (typeof value === 'number' || typeof value === 'boolean') return String(value);
   return undefined;
 };
