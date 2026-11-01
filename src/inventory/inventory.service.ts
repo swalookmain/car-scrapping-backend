@@ -64,62 +64,46 @@ export class InventoryService {
   ) {
     try {
       const sanitizedData = sanitizeObject(createDto) as CreateInventoryBatchDto;
-      const invoiceId = validateObjectId(sanitizedData.invoiceId, 'Invoice ID');
-      const vechileId = validateObjectId(
-        sanitizedData.vechileId,
-        'Vehicle ID',
-      );
       if (!Array.isArray(sanitizedData.parts) || sanitizedData.parts.length === 0) {
         throw new BadRequestException('At least one part is required');
       }
 
-      const [invoice, vechileInvoice, existingParts] = await Promise.all([
-        this.invoiceRepo.findById(invoiceId),
-        this.vehicleInvoiceRepo.findById(vechileId),
-        this.inventoryRepo.existsByVehicleId(vechileId),
-      ]);
-
-      if (!invoice) {
-        throw new NotFoundException('Invoice not found');
-      }
       const orgId = authenticatedUser.orgId;
-      if (!orgId || !sameOrganization(invoice.organizationId, orgId)) {
-        throw new NotFoundException('Invoice not found');
-      }
-      await this.assertStaffCanAccessInvoice(invoice, authenticatedUser);
-      if (!vechileInvoice) {
-        throw new NotFoundException('Vehicle invoice not found');
-      }
-      if (!sameOrganization(vechileInvoice.organizationId, orgId)) {
-        throw new NotFoundException('Vehicle invoice not found');
-      }
-      if (vechileInvoice.invoiceId?.toString() !== invoiceId) {
-        throw new BadRequestException('Vehicle does not belong to invoice');
-      }
-
-      await this.yardService.assertCanCreateInventory(vechileId);
-
-      const resolvedOrgId =
-        (vechileInvoice as { organizationId?: Types.ObjectId }).organizationId?.toString() ||
-        authenticatedUser.orgId;
-      if (!resolvedOrgId) {
+      if (!orgId) {
         throw new BadRequestException('Organization not found');
       }
 
-      const vechileModel =
-        (vechileInvoice as { model_name?: string }).model_name ?? 'UNKNOWN';
-      const purchaseDate = (invoice as { purchaseDate?: Date }).purchaseDate;
+      const context = await this.resolveCreateContext(
+        sanitizedData,
+        authenticatedUser,
+      );
+
+      await this.yardService.assertCanCreateInventoryByYardVehicleId(
+        context.yardVehicleId,
+      );
+
+      const existingParts = await this.inventoryRepo.existsByYardVehicleId(
+        context.yardVehicleId,
+      );
+
       let businessDate: Date | undefined;
       if (sanitizedData.dismantledAt) {
         await this.booksPeriodService.assertOpen(
-          resolvedOrgId,
+          orgId,
           sanitizedData.dismantledAt,
           'Dismantle date',
         );
         businessDate = new Date(sanitizedData.dismantledAt);
-      } else if (purchaseDate) {
-        businessDate = purchaseDate;
-        await this.booksPeriodService.assertOpen(resolvedOrgId, businessDate, 'Inventory date');
+      } else if (context.purchaseDate) {
+        businessDate = context.purchaseDate;
+        await this.booksPeriodService.assertOpen(orgId, businessDate, 'Inventory date');
+      } else {
+        businessDate = new Date();
+        await this.booksPeriodService.assertOpen(
+          orgId,
+          businessDate,
+          'Inventory date',
+        );
       }
 
       const parts = sanitizedData.parts ?? [];
@@ -173,18 +157,37 @@ export class InventoryService {
           }
 
           return {
-            invoiceId: new Types.ObjectId(invoiceId),
-            vechileId: new Types.ObjectId(vechileId),
-            auctionId:
-              (vechileInvoice as { auctionId?: Types.ObjectId }).auctionId ||
-              undefined,
-            lotId:
-              (vechileInvoice as { lotId?: Types.ObjectId }).lotId || undefined,
-            auctionVehicleId:
-              (vechileInvoice as { auctionVehicleId?: Types.ObjectId })
-                .auctionVehicleId || undefined,
-            purchaseInvoiceNumber: invoice.invoiceNumber,
-            vechileModel,
+            organizationId: new Types.ObjectId(orgId),
+            yardVehicleId: new Types.ObjectId(context.yardVehicleId),
+            ...(context.invoiceId
+              ? { invoiceId: new Types.ObjectId(context.invoiceId) }
+              : {}),
+            ...(context.vechileId
+              ? { vechileId: new Types.ObjectId(context.vechileId) }
+              : {}),
+            ...(context.leadId
+              ? { leadId: new Types.ObjectId(context.leadId) }
+              : {}),
+            ...(context.auctionId
+              ? { auctionId: new Types.ObjectId(context.auctionId) }
+              : {}),
+            ...(context.lotId
+              ? { lotId: new Types.ObjectId(context.lotId) }
+              : {}),
+            ...(context.auctionVehicleId
+              ? {
+                  auctionVehicleId: new Types.ObjectId(
+                    context.auctionVehicleId,
+                  ),
+                }
+              : {}),
+            ...(context.purchaseInvoiceNumber
+              ? { purchaseInvoiceNumber: context.purchaseInvoiceNumber }
+              : {}),
+            ...(context.registrationNumber
+              ? { registrationNumber: context.registrationNumber }
+              : {}),
+            vechileModel: context.vechileModel,
             partName: part.partName,
             partType: normalizePartType(part.partType),
             ...(part.catalogPartId
@@ -211,7 +214,7 @@ export class InventoryService {
       const created = await this.inventoryRepo.createMany(records);
       if (!existingParts) {
         await this.yardService.completeDismantling(
-          vechileId,
+          context.yardVehicleId,
           authenticatedUser,
           sanitizedData.dismantledAt,
         );
@@ -228,10 +231,92 @@ export class InventoryService {
     }
   }
 
+  private async resolveCreateContext(
+    dto: CreateInventoryBatchDto,
+    authenticatedUser: AuthenticatedUser,
+  ) {
+    const orgId = authenticatedUser.orgId!;
+
+    // Canonical vehicle id = YardVehicle._id (one id for the whole system)
+    const yardVehicleId = validateObjectId(
+      dto.yardVehicleId,
+      'Yard vehicle ID',
+    );
+    // Optional purchase-invoice links only (never vehicle identity)
+    let vechileId = dto.vechileId
+      ? validateObjectId(dto.vechileId, 'Vehicle ID')
+      : undefined;
+    let invoiceId = dto.invoiceId
+      ? validateObjectId(dto.invoiceId, 'Invoice ID')
+      : undefined;
+
+    const yardVehicle = await this.yardService.findOne(
+      yardVehicleId,
+      authenticatedUser,
+    );
+
+    if (!vechileId && yardVehicle.vehicleInvoiceId) {
+      vechileId = yardVehicle.vehicleInvoiceId.toString();
+    }
+    if (!invoiceId && yardVehicle.invoiceId) {
+      invoiceId = yardVehicle.invoiceId.toString();
+    }
+
+    let purchaseInvoiceNumber: string | undefined;
+    let purchaseDate: Date | undefined;
+    let vechileModel =
+      [yardVehicle.make, yardVehicle.modelName].filter(Boolean).join(' ') ||
+      yardVehicle.registrationNumber ||
+      'UNKNOWN';
+
+    if (invoiceId) {
+      const invoice = await this.invoiceRepo.findById(invoiceId);
+      if (
+        invoice &&
+        sameOrganization(invoice.organizationId, orgId)
+      ) {
+        purchaseInvoiceNumber = invoice.invoiceNumber;
+        purchaseDate = invoice.purchaseDate;
+      }
+    }
+
+    if (vechileId) {
+      const vechileInvoice = await this.vehicleInvoiceRepo.findById(vechileId);
+      if (
+        vechileInvoice &&
+        sameOrganization(vechileInvoice.organizationId, orgId)
+      ) {
+        vechileModel =
+          (vechileInvoice as { model_name?: string }).model_name || vechileModel;
+        if (
+          invoiceId &&
+          vechileInvoice.invoiceId?.toString() !== invoiceId
+        ) {
+          throw new BadRequestException('Vehicle does not belong to invoice');
+        }
+      }
+    }
+
+    return {
+      yardVehicleId,
+      vechileId,
+      invoiceId,
+      leadId: yardVehicle.leadId?.toString(),
+      auctionId: yardVehicle.auctionId?.toString(),
+      lotId: yardVehicle.lotId?.toString(),
+      auctionVehicleId: yardVehicle.auctionVehicleId?.toString(),
+      registrationNumber: yardVehicle.registrationNumber,
+      purchaseInvoiceNumber,
+      purchaseDate,
+      vechileModel,
+    };
+  }
+
   async findAll(
     filters: {
       invoiceId?: string;
       vechileId?: string;
+      yardVehicleId?: string;
       status?: Status;
       condition?: Condition;
       page?: number;
@@ -241,20 +326,34 @@ export class InventoryService {
     },
     authenticatedUser: AuthenticatedUser,
   ): Promise<PaginatedResponse<Inventory> | Inventory[]> {
+    const orgId = authenticatedUser.orgId;
+    if (!orgId) {
+      throw new BadRequestException('Organization not found');
+    }
     const invoiceIds = await this.getAccessibleInvoiceIds(authenticatedUser);
     const filter: Record<string, unknown> = {
-      invoiceId: { $in: invoiceIds },
+      $or: [
+        { organizationId: new Types.ObjectId(orgId) },
+        ...(invoiceIds.length
+          ? [{ invoiceId: { $in: invoiceIds } }]
+          : []),
+      ],
     };
     if (filters.invoiceId) {
       const validatedId = validateObjectId(filters.invoiceId, 'Invoice ID');
-      if (!invoiceIds.some((id) => id.toString() === validatedId)) {
-        throw new NotFoundException('Invoice not found');
-      }
       filter.invoiceId = new Types.ObjectId(validatedId);
+      delete filter.$or;
     }
     if (filters.vechileId) {
       const validatedId = validateObjectId(filters.vechileId, 'Vehicle ID');
       filter.vechileId = new Types.ObjectId(validatedId);
+    }
+    if (filters.yardVehicleId) {
+      const validatedId = validateObjectId(
+        filters.yardVehicleId,
+        'Yard vehicle ID',
+      );
+      filter.yardVehicleId = new Types.ObjectId(validatedId);
     }
     if (filters.status) {
       filter.status = filters.status;
@@ -364,9 +463,12 @@ export class InventoryService {
 
     const orgId =
       authenticatedUser.orgId ||
-      (
-        await this.vehicleInvoiceRepo.findById(existing.vechileId.toString())
-      )?.organizationId?.toString();
+      existing.organizationId?.toString() ||
+      (existing.vechileId
+        ? (
+            await this.vehicleInvoiceRepo.findById(existing.vechileId.toString())
+          )?.organizationId?.toString()
+        : undefined);
 
     if (
       orgId &&
@@ -416,28 +518,61 @@ export class InventoryService {
   async findByVehicle(vechileId: string, authenticatedUser: AuthenticatedUser) {
     const validatedId = validateObjectId(vechileId, 'Vehicle ID');
     const vehicle = await this.vehicleInvoiceRepo.findById(validatedId);
-    if (!vehicle || vehicle.isDeleted) {
-      throw new NotFoundException('Vehicle not found');
+    if (vehicle && !vehicle.isDeleted) {
+      if (!sameOrganization(vehicle.organizationId, authenticatedUser.orgId)) {
+        throw new NotFoundException('Vehicle not found');
+      }
+      if (vehicle.invoiceId) {
+        const invoice = await this.invoiceRepo.findById(
+          vehicle.invoiceId.toString(),
+        );
+        if (invoice) {
+          await this.assertStaffCanAccessInvoice(invoice, authenticatedUser);
+        }
+      }
     }
-    if (!sameOrganization(vehicle.organizationId, authenticatedUser.orgId)) {
-      throw new NotFoundException('Vehicle not found');
-    }
-    const invoice = await this.invoiceRepo.findById(vehicle.invoiceId.toString());
-    if (!invoice) {
-      throw new NotFoundException('Vehicle not found');
-    }
-    await this.assertStaffCanAccessInvoice(invoice, authenticatedUser);
+
     const parts = await this.inventoryRepo.findByVehicleId(validatedId);
+    if (!parts.length && !vehicle) {
+      throw new NotFoundException('Vehicle not found');
+    }
+    for (const part of parts.slice(0, 1)) {
+      await this.assertInventoryAccessible(part, authenticatedUser);
+    }
     const totalWeightKg = parts.reduce(
       (sum, p) => sum + (typeof p.weightKg === 'number' ? p.weightKg : 0),
       0,
     );
     return {
-      vehicle,
+      vehicle: vehicle || null,
       parts,
       partCount: parts.length,
       totalWeightKg,
-      grossWeightKg: vehicle.grossWeightKg ?? 0,
+      grossWeightKg: vehicle?.grossWeightKg ?? 0,
+    };
+  }
+
+  async findByYardVehicle(
+    yardVehicleId: string,
+    authenticatedUser: AuthenticatedUser,
+  ) {
+    const validatedId = validateObjectId(yardVehicleId, 'Yard vehicle ID');
+    const yardVehicle = await this.yardService.findOne(
+      validatedId,
+      authenticatedUser,
+    );
+    const parts = await this.inventoryRepo.findByYardVehicleId(validatedId);
+    const totalWeightKg = parts.reduce(
+      (sum, p) => sum + (typeof p.weightKg === 'number' ? p.weightKg : 0),
+      0,
+    );
+    return {
+      yardVehicle,
+      vehicle: null,
+      parts,
+      partCount: parts.length,
+      totalWeightKg,
+      grossWeightKg: yardVehicle.grossWeightKg ?? 0,
     };
   }
 
@@ -650,20 +785,67 @@ export class InventoryService {
   }
 
   private async assertInventoryAccessible(
-    record: { invoiceId?: unknown },
+    record: {
+      invoiceId?: unknown;
+      organizationId?: unknown;
+      leadId?: unknown;
+      auctionId?: unknown;
+      yardVehicleId?: unknown;
+      createdBy?: unknown;
+    },
     authenticatedUser: AuthenticatedUser,
   ) {
+    const orgId = authenticatedUser.orgId;
+    const inOrg =
+      !!record.organizationId &&
+      !!orgId &&
+      sameOrganization(record.organizationId, orgId);
+
+    if (inOrg && !isStaffUser(authenticatedUser)) {
+      return;
+    }
+
+    if (inOrg && isStaffUser(authenticatedUser)) {
+      if (record.createdBy?.toString() === authenticatedUser.userId) {
+        return;
+      }
+      // Auction inventory is shared with org staff (matches yard RBAC)
+      if (record.auctionId) {
+        return;
+      }
+      if (record.leadId) {
+        const leadIds = await this.leadService.getOwnedLeadIds(authenticatedUser);
+        if (
+          leadIds.some((id) => id.toString() === record.leadId?.toString())
+        ) {
+          return;
+        }
+      }
+      if (record.yardVehicleId) {
+        try {
+          await this.yardService.findOne(
+            record.yardVehicleId.toString(),
+            authenticatedUser,
+          );
+          return;
+        } catch {
+          // fall through
+        }
+      }
+    }
+
     const invoiceId = record.invoiceId?.toString();
-    if (!invoiceId) {
-      throw new NotFoundException('Inventory not found');
+    if (invoiceId) {
+      const invoice = await this.invoiceRepo.findById(invoiceId);
+      if (
+        invoice &&
+        sameOrganization(invoice.organizationId, authenticatedUser.orgId)
+      ) {
+        await this.assertStaffCanAccessInvoice(invoice, authenticatedUser);
+        return;
+      }
     }
-    const invoice = await this.invoiceRepo.findById(invoiceId);
-    if (
-      !invoice ||
-      !sameOrganization(invoice.organizationId, authenticatedUser.orgId)
-    ) {
-      throw new NotFoundException('Inventory not found');
-    }
-    await this.assertStaffCanAccessInvoice(invoice, authenticatedUser);
+
+    throw new NotFoundException('Inventory not found');
   }
 }

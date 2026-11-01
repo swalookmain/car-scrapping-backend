@@ -1,0 +1,373 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <style>
+    @page { size: A4; margin: 16mm 16mm 16mm 16mm; }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    html, body { width: 100%; }
+    body {
+      font-family: Arial, Helvetica, sans-serif;
+      font-size: 12.25px;
+      color: #111;
+      line-height: 1.42;
+      -webkit-print-color-adjust: exact;
+      print-color-adjust: exact;
+    }
+    .sheet {
+      position: relative;
+      min-height: 250mm;
+      padding: 6mm 4mm 22mm 4mm;
+      overflow: hidden;
+    }
+
+    /* Layout chrome matching attached letterhead corners / bands */
+    .accent-top {
+      position: absolute;
+      top: 0; left: 0; right: 0;
+      height: 9px;
+      background: linear-gradient(90deg, #f0a800, #f6c93a 40%, #f0a800);
+    }
+    .accent-top-curve {
+      position: absolute;
+      top: 0; right: 0;
+      width: 52%;
+      height: 34px;
+      background: #f5b400;
+      border-radius: 0 0 0 70px;
+      opacity: 0.95;
+      z-index: 0;
+    }
+    .accent-bottom {
+      position: absolute;
+      left: 0; right: 0; bottom: 0;
+      height: 26px;
+      background: linear-gradient(90deg, #f0a800, #f6c93a 55%, #e89a00);
+      border-radius: 0 48px 0 0;
+      z-index: 0;
+    }
+    .corner {
+      position: absolute;
+      width: 40px;
+      height: 40px;
+      border: 3.5px solid #f5b400;
+      z-index: 3;
+    }
+    .corner-tl { top: 12px; left: 2px; border-right: none; border-bottom: none; }
+    .corner-br { right: 2px; bottom: 34px; border-left: none; border-top: none; }
+
+    .content { position: relative; z-index: 1; }
+
+    /* Header — logos + legal name (settings) | GSTIN + buyer ref (settings/letter) */
+    .header {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      gap: 10px;
+      padding-top: 8px;
+      margin-bottom: 8px;
+    }
+    .header-left {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      max-width: 70%;
+      min-width: 0;
+    }
+    .logo {
+      width: 58px;
+      height: 58px;
+      object-fit: contain;
+      flex-shrink: 0;
+    }
+    .org-name {
+      font-size: 17px;
+      font-weight: 800;
+      text-transform: uppercase;
+      line-height: 1.15;
+      letter-spacing: 0.15px;
+    }
+    .tagline {
+      margin-top: 3px;
+      font-size: 11px;
+      font-weight: 700;
+    }
+    .header-right {
+      text-align: right;
+      font-size: 11.5px;
+      line-height: 1.45;
+      flex-shrink: 0;
+      padding-top: 2px;
+    }
+    .gstin { font-weight: 700; }
+    .buyer-ref {
+      margin-top: 3px;
+      font-weight: 800;
+      font-size: 12px;
+      white-space: nowrap;
+    }
+
+    .meta-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-end;
+      margin: 14px 0 12px;
+      font-size: 12.5px;
+      gap: 20px;
+    }
+    .meta-row .label { font-weight: 700; }
+    .uline {
+      display: inline-block;
+      border-bottom: 1px solid #111;
+      min-width: 150px;
+      margin-left: 6px;
+      padding: 0 3px 1px;
+      font-weight: 600;
+    }
+
+    .to-block { margin: 8px 0 12px; }
+    .to-label { font-weight: 700; }
+    .to-name { font-weight: 700; margin-top: 2px; }
+    .to-addr { margin-top: 1px; }
+
+    .subject { margin: 12px 0; }
+    .subject-label {
+      font-weight: 800;
+      text-decoration: underline;
+    }
+    .subject-text { font-weight: 700; }
+
+    .auction-ref {
+      font-weight: 800;
+      margin: 10px 0 12px;
+      word-break: break-word;
+    }
+
+    .salutation { margin: 6px 0 10px; font-weight: 600; }
+
+    .body-text {
+      text-align: justify;
+      margin-bottom: 12px;
+    }
+
+    .field-rows { margin: 10px 0 8px; }
+    .field-row {
+      display: flex;
+      align-items: baseline;
+      margin-bottom: 9px;
+      gap: 6px;
+    }
+    .field-row .k { font-weight: 700; white-space: nowrap; }
+    .field-row .v {
+      flex: 1;
+      border-bottom: 1px solid #111;
+      min-height: 15px;
+      padding: 0 4px 1px;
+      font-weight: 600;
+    }
+    .field-row .v.blank { min-height: 20px; }
+
+    .collect-note {
+      font-weight: 700;
+      margin: 8px 0 6px;
+    }
+
+    .lot-list { margin: 2px 0 10px 2px; }
+    .lot-list .row { margin-bottom: 2px; }
+    .lot-list .row::before { content: "• "; font-weight: 700; }
+    .lot-list .k { font-weight: 700; }
+
+    .thanks { margin-top: 14px; }
+
+    .sign-area { margin-top: 16px; }
+    .sign-name { font-weight: 800; }
+    .sign-title { font-weight: 700; margin-top: 1px; }
+    .sign-media {
+      display: flex;
+      align-items: flex-end;
+      gap: 12px;
+      margin-top: 8px;
+    }
+    .sign-media img.signature {
+      max-height: 52px;
+      max-width: 140px;
+      object-fit: contain;
+    }
+    .sign-media img.stamp {
+      max-height: 78px;
+      max-width: 78px;
+      object-fit: contain;
+    }
+
+    .footer {
+      margin-top: 26px;
+      padding-top: 8px;
+      border-top: 1.5px solid #222;
+      text-align: center;
+      font-size: 10.75px;
+      line-height: 1.55;
+      position: relative;
+      z-index: 1;
+    }
+    .footer .phones {
+      font-weight: 600;
+      margin-top: 2px;
+    }
+    .phone-ico {
+      display: inline-block;
+      width: 10px;
+      height: 10px;
+      margin: 0 2px 0 6px;
+      vertical-align: -1px;
+    }
+  </style>
+</head>
+<body>
+  <div class="sheet">
+    <div class="accent-top"></div>
+    <div class="accent-top-curve"></div>
+    <div class="corner corner-tl"></div>
+    <div class="corner corner-br"></div>
+    <div class="accent-bottom"></div>
+
+    <div class="content">
+      <div class="header">
+        <div class="header-left">
+          {{#if settings.rvsfLogoUrl}}
+          <img class="logo" src="{{settings.rvsfLogoUrl}}" alt="RVSF logo" />
+          {{/if}}
+          {{#if settings.logoUrl}}
+          <img class="logo" src="{{settings.logoUrl}}" alt="Company logo" />
+          {{/if}}
+          <div>
+            {{#if settings.legalName}}
+            <div class="org-name">{{settings.legalName}}</div>
+            {{/if}}
+            {{#if settings.tagline}}
+            <div class="tagline">{{settings.tagline}}</div>
+            {{/if}}
+          </div>
+        </div>
+        <div class="header-right">
+          {{#if settings.gstin}}
+          <div class="gstin">GSTIN: {{settings.gstin}}</div>
+          {{/if}}
+          {{#if buyerRefDisplay}}
+          <div class="buyer-ref">{{buyerRefDisplay}}</div>
+          {{/if}}
+        </div>
+      </div>
+
+      <div class="meta-row">
+        <div>
+          <span class="label">Ref No.</span><span class="uline">{{letter.letterNumber}}</span>
+        </div>
+        <div>
+          <span class="label">Dated</span><span class="uline">{{letterDate}}</span>
+        </div>
+      </div>
+
+      <div class="to-block">
+        <div class="to-label">To,</div>
+        <div class="to-name">{{letter.recipientName}}</div>
+        <div class="to-addr">
+          {{letter.recipientAddress}}{{#if letter.recipientPinCode}}, PIN - {{letter.recipientPinCode}}{{/if}}
+        </div>
+      </div>
+
+      <div class="subject">
+        <span class="subject-label">Subject:</span>
+        <span class="subject-text">
+          Authorization to take delivery of lots as per details mentioned below &amp; the Ref. Number
+        </span>
+      </div>
+
+      {{#if letter.auctionNumber}}
+      <div class="auction-ref">{{letter.auctionNumber}}</div>
+      {{/if}}
+
+      <div class="salutation">Dear Sir</div>
+
+      <p class="body-text">
+        I
+        {{#if settings.proprietorName}}<strong>{{settings.proprietorName}}</strong>{{/if}}
+        {{#if settings.proprietorTitle}}{{settings.proprietorTitle}}{{/if}}
+        {{#if settings.legalName}}M/S <strong>{{settings.legalName}}</strong>,{{/if}}
+        here by, authorize following person for taking delivery of Lot as per details mentioned below.
+      </p>
+
+      <div class="field-rows">
+        <div class="field-row">
+          <span class="k">Name of Authorized Person:</span>
+          <span class="v">{{letter.authorizedPersonName}}</span>
+        </div>
+        <div class="field-row">
+          <span class="k">ID Proof Details (Aadhar Number):</span>
+          <span class="v">{{letter.authorizedPersonIdProof}}</span>
+        </div>
+        <div class="field-row">
+          <span class="k">Authorized Person's Specimen Signature:</span>
+          <span class="v blank"></span>
+        </div>
+      </div>
+
+      <div class="collect-note">To Collect all Vehicles as per below mention lot.</div>
+
+      {{#each lotDetails}}
+      <div class="lot-list">
+        <div class="row"><span class="k">Auction Details:</span> {{auctionDetails}}</div>
+        <div class="row"><span class="k">Lot No.:</span> {{lotNumber}}</div>
+        <div class="row"><span class="k">Description:</span> {{description}}</div>
+        <div class="row"><span class="k">Dates of Lifting:</span> {{datesOfLifting}}</div>
+        <div class="row">
+          <span class="k">Lifting location:</span>
+          District: {{liftingDistrict}}&nbsp;&nbsp;State: {{liftingState}}
+        </div>
+        {{#if elvDetails}}
+        <div class="row"><span class="k">ELV DETAILS:</span> {{elvDetails}}</div>
+        {{/if}}
+      </div>
+      {{/each}}
+
+      <div class="thanks">Thanking You</div>
+
+      <div class="sign-area">
+        {{#if settings.proprietorName}}
+        <div class="sign-name">{{settings.proprietorName}}</div>
+        {{/if}}
+        {{#if settings.proprietorTitle}}
+        <div class="sign-title">{{settings.proprietorTitle}}</div>
+        {{/if}}
+        {{#if settings.signatoryAddress}}
+        <div>{{settings.signatoryAddress}}</div>
+        {{/if}}
+        <div class="sign-media">
+          {{#if settings.signatureUrl}}
+          <img class="signature" src="{{settings.signatureUrl}}" alt="Signature" />
+          {{/if}}
+          {{#if settings.stampUrl}}
+          <img class="stamp" src="{{settings.stampUrl}}" alt="Stamp" />
+          {{/if}}
+        </div>
+      </div>
+
+      <div class="footer">
+        {{#if settings.address}}
+        <div>{{settings.address}}{{#if settings.pinCode}} {{settings.pinCode}}{{/if}}</div>
+        {{/if}}
+        {{#if mobileDisplay}}
+        <div class="phones">
+          {{#each settings.mobileNumbers}}
+          <svg class="phone-ico" viewBox="0 0 24 24" aria-hidden="true">
+            <path fill="#111" d="M6.6 10.8c1.4 2.8 3.8 5.1 6.6 6.6l2.2-2.2c.3-.3.7-.4 1-.2 1.1.4 2.3.6 3.5.6.6 0 1 .4 1 1V20c0 .6-.4 1-1 1C10.6 21 3 13.4 3 4c0-.6.4-1 1-1h3.5c.6 0 1 .4 1 1 0 1.2.2 2.4.6 3.5.1.4 0 .7-.2 1L6.6 10.8z"/>
+          </svg>{{this}}
+          {{/each}}
+        </div>
+        {{/if}}
+        {{#if settings.website}}<div>Website: {{settings.website}}</div>{{/if}}
+        {{#if settings.email}}<div>Email: {{settings.email}}</div>{{/if}}
+      </div>
+    </div>
+  </div>
+</body>
+</html>

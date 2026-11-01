@@ -101,4 +101,9 @@ describe('data-scope', () => {
     const filter = staffYardOwnerFilter(staff, [], [], [yardId]);
     expect(JSON.stringify(filter)).toContain(yardId.toString());
   });
+
+  it('includes auction yard vehicles for staff', () => {
+    const filter = staffYardOwnerFilter(staff, [], [], []);
+    expect(JSON.stringify(filter)).toContain('auctionId');
+  });
 });

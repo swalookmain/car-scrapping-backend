@@ -11,13 +11,24 @@ import {
 import { RtoStatus } from 'src/common/enum/rtoStatus.enum';
 
 export class CreateVehicleCodRecordDto {
-  @ApiProperty({ description: 'Vehicle invoice ID' })
+  @ApiProperty({
+    description:
+      'Canonical vehicle id (YardVehicle). Required for all COD creates.',
+  })
   @IsMongoId()
-  vehicleId: string;
+  yardVehicleId: string;
 
-  @ApiProperty({ description: 'Invoice ID linked to this vehicle' })
+  @ApiPropertyOptional({
+    description: 'Optional legacy purchase vehicle-invoice link',
+  })
   @IsMongoId()
-  invoiceId: string;
+  @IsOptional()
+  vehicleId?: string;
+
+  @ApiPropertyOptional({ description: 'Optional purchase invoice link' })
+  @IsMongoId()
+  @IsOptional()
+  invoiceId?: string;
 
   @ApiProperty({ description: 'Whether COD is generated' })
   @IsBoolean()

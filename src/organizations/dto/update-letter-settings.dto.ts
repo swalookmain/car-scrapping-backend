@@ -76,5 +76,10 @@ export class UpdateLetterSettingsDto {
   @ApiPropertyOptional()
   @IsOptional()
   @IsString()
+  stampUrl?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
   buyerRefLabel?: string;
 }

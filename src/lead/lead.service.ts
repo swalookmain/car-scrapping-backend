@@ -102,6 +102,19 @@ export class LeadService {
           : {}),
       });
 
+      // Canonical vehicle id is created when vehicle details are first saved
+      if (
+        createdLead &&
+        (createdLead.registrationNumber ||
+          createdLead.vehicleName ||
+          createdLead.variant)
+      ) {
+        await this.yardService.ensureYardEntryForLead(
+          createdLead,
+          authenticatedUser,
+        );
+      }
+
       return createdLead;
     } catch (error) {
       this.rethrowKnown(error);
@@ -252,6 +265,18 @@ export class LeadService {
           : {}),
         updatedBy: new Types.ObjectId(authenticatedUser.userId),
       });
+
+      const leadForYard = updatedLead || { ...lead, ...sanitizedData, _id: lead._id };
+      if (
+        leadForYard.registrationNumber ||
+        leadForYard.vehicleName ||
+        leadForYard.variant
+      ) {
+        await this.yardService.ensureYardEntryForLead(
+          leadForYard,
+          authenticatedUser,
+        );
+      }
 
       return updatedLead;
     } catch (error) {
@@ -694,6 +719,7 @@ export class LeadService {
     const yardVehicle = await this.yardService.ensureYardEntryForLead(
       updated || lead,
       authenticatedUser,
+      { promoteToAwaitingArrival: true },
     );
 
     await this.liftingService.createForClosedLead({

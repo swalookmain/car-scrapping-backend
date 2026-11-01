@@ -4,15 +4,21 @@ import { YardVehicleStatus } from 'src/common/enum/yardVehicleStatus.enum';
 import { YardSourceType } from 'src/common/enum/yardSourceType.enum';
 import { Invoice } from 'src/invoice/invoice.schema';
 
+/**
+ * Canonical vehicle record for the organization.
+ * `_id` (yardVehicleId) is the one vehicle id used by inventory, COD, and sales.
+ * Purchase invoice / vehicle-invoice links are optional metadata only.
+ */
 @Schema({ timestamps: true })
 export class YardVehicle extends Document {
   @Prop({ type: Types.ObjectId, ref: 'organizations', required: true })
   organizationId: Types.ObjectId;
 
-  /** Optional for auction-only intake before purchase invoice exists */
+  /** Optional purchase vehicle-invoice link (not vehicle identity) */
   @Prop({ type: Types.ObjectId, ref: 'VechileInvoice' })
   vehicleInvoiceId?: Types.ObjectId;
 
+  /** Optional purchase invoice link (not vehicle identity) */
   @Prop({ type: Types.ObjectId, ref: Invoice.name })
   invoiceId?: Types.ObjectId;
 

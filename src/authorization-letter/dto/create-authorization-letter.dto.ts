@@ -6,6 +6,7 @@ import {
   IsOptional,
   IsString,
   Min,
+  MinLength,
   ValidateNested,
 } from 'class-validator';
 
@@ -36,10 +37,31 @@ export class CreateAuthorizationLetterDto {
   @IsMongoId()
   auctionId: string;
 
-  @ApiProperty({ default: 3 })
+  @ApiProperty({ description: 'Name of person authorized to take delivery' })
+  @IsString()
+  @MinLength(2)
+  authorizedPersonName: string;
+
+  @ApiProperty({ description: 'Aadhaar / ID proof number of authorized person' })
+  @IsString()
+  @MinLength(4)
+  authorizedPersonIdProof: string;
+
+  @ApiPropertyOptional({
+    description: 'Letter date (ISO). Defaults to today.',
+  })
+  @IsOptional()
+  @IsString()
+  letterDate?: string;
+
+  @ApiPropertyOptional({
+    deprecated: true,
+    description: 'Legacy extension-days field; ignored by delivery letter',
+  })
+  @IsOptional()
   @IsInt()
   @Min(1)
-  extensionDays: number;
+  extensionDays?: number;
 
   @ApiPropertyOptional({ type: RecipientOverridesDto })
   @IsOptional()

@@ -1,5 +1,5 @@
 import { ApiPropertyOptional } from '@nestjs/swagger';
-import { IsInt, IsOptional, IsString, Min } from 'class-validator';
+import { IsInt, IsOptional, IsString, Min, MinLength } from 'class-validator';
 
 export class UpdateAuthorizationLetterDto {
   @ApiPropertyOptional()
@@ -23,6 +23,23 @@ export class UpdateAuthorizationLetterDto {
   buyerReferenceNumber?: string;
 
   @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  @MinLength(2)
+  authorizedPersonName?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  @MinLength(4)
+  authorizedPersonIdProof?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  letterDate?: string;
+
+  @ApiPropertyOptional({ deprecated: true })
   @IsOptional()
   @IsInt()
   @Min(1)

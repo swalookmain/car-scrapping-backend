@@ -61,6 +61,7 @@ export class InventoryController {
   @ApiOperation({ summary: 'Get inventory with optional filters' })
   @ApiQuery({ name: 'invoiceId', required: false, type: String })
   @ApiQuery({ name: 'vechileId', required: false, type: String })
+  @ApiQuery({ name: 'yardVehicleId', required: false, type: String })
   @ApiQuery({ name: 'status', required: false, enum: Status })
   @ApiQuery({ name: 'condition', required: false, enum: Condition })
   @ApiResponse({ status: 200, description: 'Inventory retrieved successfully' })
@@ -68,6 +69,7 @@ export class InventoryController {
     @Query() query: PaginationQueryDto & {
       invoiceId?: string;
       vechileId?: string;
+      yardVehicleId?: string;
       status?: Status;
       condition?: Condition;
     },
@@ -77,6 +79,7 @@ export class InventoryController {
       {
         invoiceId: query.invoiceId,
         vechileId: query.vechileId,
+        yardVehicleId: query.yardVehicleId,
         status: query.status,
         condition: query.condition,
         page: query.page,
@@ -114,6 +117,19 @@ export class InventoryController {
     @GetUser() authenticatedUser: AuthenticatedUser,
   ) {
     return this.inventoryService.findByVehicle(vechileId, authenticatedUser);
+  }
+
+  @Get('by-yard-vehicle/:yardVehicleId')
+  @Roles(Role.ADMIN, Role.STAFF)
+  @ApiOperation({ summary: 'Get all parts for a yard vehicle' })
+  findByYardVehicle(
+    @Param('yardVehicleId') yardVehicleId: string,
+    @GetUser() authenticatedUser: AuthenticatedUser,
+  ) {
+    return this.inventoryService.findByYardVehicle(
+      yardVehicleId,
+      authenticatedUser,
+    );
   }
 
   @Get(':id')

@@ -24,6 +24,7 @@ const DEFAULT_SETTINGS = {
   logoUrl: '',
   rvsfLogoUrl: '',
   signatureUrl: '',
+  stampUrl: '',
   buyerRefLabel: 'MSTC BUYER REF. NO.',
 };
 
@@ -69,7 +70,7 @@ export class OrganizationLetterSettingsService {
 
   async uploadAsset(
     user: AuthenticatedUser,
-    assetType: 'logo' | 'rvsfLogo' | 'signature',
+    assetType: 'logo' | 'rvsfLogo' | 'signature' | 'stamp',
     file: UploadFile,
   ) {
     const orgId = this.getOrgId(user);
@@ -81,6 +82,7 @@ export class OrganizationLetterSettingsService {
       logo: 'logoUrl',
       rvsfLogo: 'rvsfLogoUrl',
       signature: 'signatureUrl',
+      stamp: 'stampUrl',
     } as const;
 
     return this.settingsRepo.upsertByOrganizationId(orgId, {

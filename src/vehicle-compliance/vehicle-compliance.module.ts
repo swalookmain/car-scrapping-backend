@@ -11,6 +11,7 @@ import { VehicleComplianceRepository } from './vehicle-compliance.repository';
 import { InvoiceModule } from 'src/invoice/invoice.module';
 import { AuditLogModule } from 'src/audit-log/audit-log.module';
 import { LeadModule } from 'src/lead/lead.module';
+import { YardModule } from 'src/yard/yard.module';
 
 @Module({
   imports: [
@@ -21,6 +22,7 @@ import { LeadModule } from 'src/lead/lead.module';
     AuditLogModule,
     LeadModule,
     forwardRef(() => InvoiceModule),
+    forwardRef(() => YardModule),
   ],
   controllers: [VehicleComplianceController],
   providers: [VehicleComplianceService, VehicleComplianceRepository],

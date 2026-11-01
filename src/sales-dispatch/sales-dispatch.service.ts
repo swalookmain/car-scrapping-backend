@@ -13,7 +13,6 @@ import { SalesInvoiceItemRepository } from './sales-invoice-item.repository';
 import { InventoryMovementRepository } from './inventory-movement.repository';
 import { InventoryRepository } from 'src/inventory/inventory.repository';
 import { VehicleComplianceRepository } from 'src/vehicle-compliance/vehicle-compliance.repository';
-import { VehicleInvoiceRepository } from 'src/invoice/vehicle-invoice.repository';
 import type { AuthenticatedUser } from 'src/common/interface/authenticated-user.interface';
 import { isStaffUser, staffObjectId } from 'src/common/access/data-scope';
 import { sanitizeObject, validateObjectId } from 'src/common/utils/security.util';
@@ -45,8 +44,10 @@ import { BuyerType } from 'src/common/enum/buyerType.enum';
 
 type InventoryLike = {
   _id: Types.ObjectId;
-  vechileId: Types.ObjectId;
-  purchaseInvoiceNumber: string;
+  vechileId?: Types.ObjectId;
+  yardVehicleId?: Types.ObjectId;
+  registrationNumber?: string;
+  purchaseInvoiceNumber?: string;
   availableQuantity: number;
   quantityIssued: number;
   openingStock: number;
@@ -96,7 +97,6 @@ export class SalesDispatchService {
     private readonly inventoryMovementRepository: InventoryMovementRepository,
     private readonly inventoryRepository: InventoryRepository,
     private readonly vehicleComplianceRepository: VehicleComplianceRepository,
-    private readonly vehicleInvoiceRepository: VehicleInvoiceRepository,
     private readonly taxEngineService: TaxEngineService,
     private readonly taxConfigRepository: TaxConfigRepository,
     private readonly gstAuditService: GstAuditService,
@@ -257,6 +257,9 @@ export class SalesDispatchService {
           quantity: item.quantity,
           unitPrice: item.unitPrice,
           lineTotal: item.lineTotal,
+          ...(item.soldWeightKg != null && item.soldWeightKg > 0
+            ? { soldWeightKg: item.soldWeightKg }
+            : {}),
         })),
       );
 
@@ -491,6 +494,9 @@ export class SalesDispatchService {
           quantity: item.quantity,
           unitPrice: item.unitPrice,
           lineTotal: item.lineTotal,
+          ...(item.soldWeightKg != null && item.soldWeightKg > 0
+            ? { soldWeightKg: item.soldWeightKg }
+            : {}),
         })),
       );
       lineItemsForTotals = validatedItems.map((item) => ({
@@ -621,10 +627,10 @@ export class SalesDispatchService {
           }
         }
 
-        const codGenerated =
-          await this.vehicleComplianceRepository.hasGeneratedCodForVehicle(
-            part.vechileId.toString(),
-          );
+        const codGenerated = await this.assertCodGeneratedForPart(
+          part as InventoryLike,
+          item.itemCode,
+        );
         if (!codGenerated) {
           throw new BadRequestException(
             `COD not generated for vehicle linked to item ${item.itemCode}`,
@@ -776,18 +782,7 @@ export class SalesDispatchService {
       partMap.set(part._id.toString(), part);
     });
 
-    const vehicles = await Promise.all(
-      Array.from(
-        new Set((parts as unknown as InventoryLike[]).map((part) => part.vechileId.toString())),
-      ).map((vehicleId) => this.vehicleInvoiceRepository.findById(vehicleId)),
-    );
-    const vehicleMap = new Map<string, string>();
-    vehicles.forEach((vehicle) => {
-      if (vehicle) {
-        vehicleMap.set(vehicle._id.toString(), vehicle.registration_number);
-      }
-    });
-
+    // Vehicle display comes from canonical yard identity / registration on the part
     return items.map((item) => {
       const part = partMap.get(item.partId);
       if (!part) {
@@ -821,8 +816,12 @@ export class SalesDispatchService {
       return {
         partId: part._id,
         itemCode: item.itemCode,
-        vehicleCode: vehicleMap.get(part.vechileId.toString()) ?? 'UNKNOWN',
-        purchaseInvoiceNumber: part.purchaseInvoiceNumber,
+        vehicleCode:
+          part.registrationNumber ||
+          (part.yardVehicleId
+            ? part.yardVehicleId.toString().slice(-8).toUpperCase()
+            : 'UNKNOWN'),
+        purchaseInvoiceNumber: part.purchaseInvoiceNumber || undefined,
         quantity: item.quantity,
         unitPrice: item.unitPrice,
         lineTotal: item.quantity * item.unitPrice,
@@ -831,6 +830,27 @@ export class SalesDispatchService {
           : {}),
       };
     });
+  }
+
+  private async assertCodGeneratedForPart(
+    part: InventoryLike,
+    _itemCode: string,
+  ): Promise<boolean> {
+    if (part.yardVehicleId) {
+      const byYard =
+        await this.vehicleComplianceRepository.hasGeneratedCodForYardVehicle(
+          part.yardVehicleId.toString(),
+        );
+      if (byYard) return true;
+    }
+    if (part.vechileId) {
+      return Boolean(
+        await this.vehicleComplianceRepository.hasGeneratedCodForVehicle(
+          part.vechileId.toString(),
+        ),
+      );
+    }
+    return false;
   }
 
   private getSubtotal(items: Array<{ lineTotal: number }>) {

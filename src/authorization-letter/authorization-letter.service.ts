@@ -21,6 +21,7 @@ import {
 } from 'src/common/enum/authorizationLetterStatus.enum';
 import { AuctionRepository } from 'src/auction/auction.repository';
 import { AuctionLotRepository } from 'src/auction/auction-lot.repository';
+import { AuctionVehicleRepository } from 'src/auction/auction-vehicle.repository';
 import { OrganizationLetterSettingsService } from 'src/organizations/organization-letter-settings.service';
 import { StorageService } from 'src/common/services/storage.service';
 import { AuthorizationLetterRepository } from './authorization-letter.repository';
@@ -29,13 +30,14 @@ import { CreateAuthorizationLetterDto } from './dto/create-authorization-letter.
 import { UpdateAuthorizationLetterDto } from './dto/update-authorization-letter.dto';
 import { AuthorizationLetterLotSnapshot } from './authorization-letter.schema';
 import type { AuctionLotDocument } from 'src/auction/auction-lot.schema';
+import type { AuctionDocument } from 'src/auction/auction.schema';
 
 @Injectable()
 export class AuthorizationLetterService {
   private readonly templatePath = path.join(
     __dirname,
     'templates',
-    'extension-lifting.hbs',
+    'authorization-delivery.hbs',
   );
 
   constructor(
@@ -43,6 +45,7 @@ export class AuthorizationLetterService {
     private readonly counterRepo: AuthorizationLetterCounterRepository,
     private readonly auctionRepo: AuctionRepository,
     private readonly lotRepo: AuctionLotRepository,
+    private readonly auctionVehicleRepo: AuctionVehicleRepository,
     private readonly letterSettingsService: OrganizationLetterSettingsService,
     private readonly storageService: StorageService,
   ) {}
@@ -73,45 +76,84 @@ export class AuthorizationLetterService {
     return dealDoneLots.every((lot) => this.isLotEligible(lot));
   }
 
-  buildLotSnapshots(
-    auctionNumber: string,
+  async buildLotSnapshots(
+    orgId: string,
+    auction: AuctionDocument,
     lots: AuctionLotDocument[],
-  ): AuthorizationLetterLotSnapshot[] {
+  ): Promise<AuthorizationLetterLotSnapshot[]> {
     const dealDoneLots = this.getDealDoneLots(lots);
-    const groups = new Map<string, AuctionLotDocument[]>();
-
-    for (const lot of dealDoneLots) {
-      const dateKey = lot.delivery!.lastLiftingDate!.toISOString().slice(0, 10);
-      const existing = groups.get(dateKey) ?? [];
-      existing.push(lot);
-      groups.set(dateKey, existing);
+    const auctionId = auction._id.toString();
+    const vehicles = await this.auctionVehicleRepo.findByAuction(
+      orgId,
+      auctionId,
+    );
+    const vehiclesByLot = new Map<string, typeof vehicles>();
+    for (const vehicle of vehicles) {
+      const lotKey = vehicle.lotId?.toString();
+      if (!lotKey) continue;
+      const list = vehiclesByLot.get(lotKey) || [];
+      list.push(vehicle);
+      vehiclesByLot.set(lotKey, list);
     }
 
+    const liftingDistrict = auction.city || auction.vehicleLocation || '';
+    const liftingState = auction.state || '';
+    const auctionDetails = auction.auctionNumber || '';
+
     const snapshots: AuthorizationLetterLotSnapshot[] = [];
-    let lineIndex = 1;
+    const sortedLots = [...dealDoneLots].sort((a, b) =>
+      String(a.lotNumber).localeCompare(String(b.lotNumber), undefined, {
+        numeric: true,
+      }),
+    );
 
-    for (const [, groupLots] of [...groups.entries()].sort(([a], [b]) =>
-      a.localeCompare(b),
-    )) {
-      const lotNumbers = groupLots
-        .map((lot) => lot.lotNumber)
-        .sort((a, b) => a.localeCompare(b, undefined, { numeric: true }));
-      const lotNumberLabel = lotNumbers.join(' & ');
-      const vehicleCount = groupLots.reduce((sum, lot) => sum + lot.vehicleCount, 0);
-      const lastLiftingDate = groupLots[0].delivery!.lastLiftingDate!;
-      const deliveryOrderNumber =
-        groupLots.find((lot) => lot.delivery?.deliveryOrderNumber)?.delivery
-          ?.deliveryOrderNumber ?? '';
+    for (const lot of sortedLots) {
+      const lotVehicles = vehiclesByLot.get(lot._id.toString()) || [];
+      const elvDetails = lotVehicles
+        .map(
+          (v) =>
+            (v.registrationNumber || v.vehicleNumber || '').trim().toUpperCase(),
+        )
+        .filter(Boolean)
+        .join(', ');
 
-      const formattedDate = this.formatDate(lastLiftingDate);
+      const lastLiftingDate = lot.delivery?.lastLiftingDate;
+      const datesOfLifting = lastLiftingDate
+        ? this.formatDate(lastLiftingDate)
+        : lot.pickupWindowStart && lot.pickupWindowEnd
+          ? `${this.formatDate(lot.pickupWindowStart)} - ${this.formatDate(lot.pickupWindowEnd)}`
+          : lot.pickupWindowEnd
+            ? this.formatDate(lot.pickupWindowEnd)
+            : '';
+
+      const description =
+        lot.lotDescription?.trim() ||
+        `${String(lot.vehicleCount).padStart(2, '0')} ELV`;
+
+      const deliveryOrderNumber = lot.delivery?.deliveryOrderNumber ?? '';
+
       snapshots.push({
-        lotNumber: lotNumberLabel,
+        lotNumber: lot.lotNumber,
         deliveryOrderNumber,
         lastLiftingDate,
-        vehicleCount,
-        displayLabel: `${lineIndex}. Auction Ref. No. ${auctionNumber}, Lot No. ${lotNumberLabel}, Last Date of Lifting ${formattedDate}, Total Nos. ${vehicleCount}`,
+        vehicleCount: lot.vehicleCount,
+        auctionDetails,
+        description,
+        datesOfLifting,
+        liftingDistrict,
+        liftingState,
+        elvDetails,
+        displayLabel: [
+          `Auction Details: ${auctionDetails}`,
+          `Lot No.: ${lot.lotNumber}`,
+          `Description: ${description}`,
+          datesOfLifting ? `Dates of Lifting: ${datesOfLifting}` : null,
+          `Lifting location: District: ${liftingDistrict} State: ${liftingState}`,
+          elvDetails ? `ELV DETAILS: ${elvDetails}` : null,
+        ]
+          .filter(Boolean)
+          .join(' | '),
       });
-      lineIndex += 1;
     }
 
     return snapshots;
@@ -277,6 +319,8 @@ export class AuthorizationLetterService {
       overrides.buyerReferenceNumber?.trim() ||
       auction.buyerReferenceNumber?.trim() ||
       '';
+    const authorizedPersonName = dto.authorizedPersonName?.trim() || '';
+    const authorizedPersonIdProof = dto.authorizedPersonIdProof?.trim() || '';
 
     if (!recipientName) {
       throw new BadRequestException('Recipient name is required');
@@ -284,21 +328,37 @@ export class AuthorizationLetterService {
     if (!recipientAddress) {
       throw new BadRequestException('Recipient address is required');
     }
+    if (!authorizedPersonName) {
+      throw new BadRequestException('Authorized person name is required');
+    }
+    if (!authorizedPersonIdProof) {
+      throw new BadRequestException('Authorized person ID proof is required');
+    }
+
+    const letterDate = dto.letterDate
+      ? new Date(dto.letterDate)
+      : new Date();
+    if (Number.isNaN(letterDate.getTime())) {
+      throw new BadRequestException('Invalid letter date');
+    }
 
     const letterNumber = await this.counterRepo.getNextLetterNumber();
-    const lotSnapshots = this.buildLotSnapshots(auction.auctionNumber, lots);
+    const lotSnapshots = await this.buildLotSnapshots(orgId, auction, lots);
 
     return this.letterRepo.create({
       organizationId: new Types.ObjectId(orgId),
       auctionId: new Types.ObjectId(auctionId),
       letterNumber,
       status: AuthorizationLetterStatus.DRAFT,
-      letterType: AuthorizationLetterType.EXTENSION_LIFTING,
+      letterType: AuthorizationLetterType.AUTHORIZATION_DELIVERY,
       buyerReferenceNumber,
       recipientName,
       recipientAddress,
       recipientPinCode,
-      extensionDays: dto.extensionDays,
+      authorizedPersonName,
+      authorizedPersonIdProof,
+      letterDate,
+      extensionDays: dto.extensionDays ?? 1,
       auctionNumber: auction.auctionNumber,
       lotSnapshots,
       createdBy: new Types.ObjectId(user.userId),
@@ -319,10 +379,18 @@ export class AuthorizationLetterService {
       throw new BadRequestException('Only draft letters can be edited');
     }
     const sanitized = sanitizeObject(dto) as UpdateAuthorizationLetterDto;
-    return this.letterRepo.updateById(letterId, {
+    const patch: Record<string, unknown> = {
       ...sanitized,
       updatedBy: new Types.ObjectId(user.userId),
-    });
+    };
+    if (sanitized.letterDate) {
+      const letterDate = new Date(sanitized.letterDate);
+      if (Number.isNaN(letterDate.getTime())) {
+        throw new BadRequestException('Invalid letter date');
+      }
+      patch.letterDate = letterDate;
+    }
+    return this.letterRepo.updateById(letterId, patch);
   }
 
   async delete(user: AuthenticatedUser, id: string) {
@@ -342,17 +410,31 @@ export class AuthorizationLetterService {
     const letter = await this.letterRepo.findByOrgAndId(orgId, letterId);
     if (!letter) throw new NotFoundException('Authorization letter not found');
     const settings = await this.letterSettingsService.getByOrganizationId(orgId);
-    const today = this.formatDate(new Date());
+    const letterDateSource = letter.letterDate || new Date();
+    const letterDate = this.formatDate(letterDateSource);
     const buyerRefLabel = settings.buyerRefLabel || 'MSTC BUYER REF. NO.';
     const buyerRefDisplay = letter.buyerReferenceNumber
-      ? `${buyerRefLabel}${letter.buyerReferenceNumber}`
+      ? `${buyerRefLabel} ${letter.buyerReferenceNumber}`
       : buyerRefLabel;
+
+    const lotDetails = (letter.lotSnapshots || []).map((snap) => ({
+      auctionDetails: snap.auctionDetails || letter.auctionNumber || '',
+      lotNumber: snap.lotNumber || '',
+      description: snap.description || '',
+      datesOfLifting: snap.datesOfLifting
+        || (snap.lastLiftingDate ? this.formatDate(snap.lastLiftingDate) : ''),
+      liftingDistrict: snap.liftingDistrict || '',
+      liftingState: snap.liftingState || '',
+      elvDetails: snap.elvDetails || '',
+    }));
 
     return {
       settings,
       letter,
-      today,
+      letterDate,
+      today: letterDate,
       buyerRefDisplay,
+      lotDetails,
       lotLines: letter.lotSnapshots.map((snap) => snap.displayLabel),
       mobileDisplay: (settings.mobileNumbers ?? []).join(' / '),
       extensionDays: letter.extensionDays,
@@ -412,11 +494,27 @@ export class AuthorizationLetterService {
 
     try {
       const page = await browser.newPage();
-      await page.setContent(html, { waitUntil: 'load' });
+      await page.setContent(html, { waitUntil: 'load', timeout: 60000 });
+      // Wait until letter-settings logos / stamp / signature have loaded (or errored)
+      await page.evaluate(async () => {
+        const images = Array.from(document.images);
+        await Promise.all(
+          images.map(
+            (img) =>
+              img.complete
+                ? Promise.resolve()
+                : new Promise<void>((resolve) => {
+                    img.addEventListener('load', () => resolve(), { once: true });
+                    img.addEventListener('error', () => resolve(), { once: true });
+                  }),
+          ),
+        );
+      });
       const pdfBuffer = await page.pdf({
         format: 'A4',
         printBackground: true,
-        margin: { top: '12mm', right: '12mm', bottom: '12mm', left: '12mm' },
+        // Equal margin on all four corners
+        margin: { top: '16mm', right: '16mm', bottom: '16mm', left: '16mm' },
       });
 
       const upload = await this.storageService.uploadFile(

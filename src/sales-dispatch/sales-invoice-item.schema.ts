@@ -18,8 +18,9 @@ export class SalesInvoiceItem extends Document {
   @Prop({ type: String, required: true, trim: true })
   vehicleCode: string;
 
-  @Prop({ type: String, required: true, trim: true })
-  purchaseInvoiceNumber: string;
+  /** Optional — inventory may come from lead/auction without a purchase invoice */
+  @Prop({ type: String, trim: true })
+  purchaseInvoiceNumber?: string;
 
   @Prop({ type: Number, required: true, min: 1 })
   quantity: number;

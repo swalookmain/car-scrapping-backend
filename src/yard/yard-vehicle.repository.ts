@@ -76,7 +76,9 @@ export class YardVehicleRepository extends BaseRepository<YardVehicleDocument> {
   }
 
   findByAuctionVehicleIds(organizationId: string, auctionVehicleIds: string[]) {
-    if (!auctionVehicleIds.length) return Promise.resolve([]);
+    if (!auctionVehicleIds.length) {
+      return Promise.resolve([] as Awaited<ReturnType<typeof this.model.find>>);
+    }
     return this.model.find({
       organizationId: new Types.ObjectId(organizationId),
       auctionVehicleId: {

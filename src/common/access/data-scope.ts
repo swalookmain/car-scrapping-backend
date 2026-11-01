@@ -63,8 +63,8 @@ export function staffLiftingOwnerFilter(
 }
 
 /**
- * Yard / dismantle rows the staff created, tied to their lead, or tied to an
- * invoice they can already see.
+ * Yard / dismantle rows the staff created, tied to their lead, invoice they
+ * can see, lifting assignment, or any auction-sourced yard vehicle in org.
  */
 export function staffYardOwnerFilter(
   user: AuthenticatedUser,
@@ -76,7 +76,11 @@ export function staffYardOwnerFilter(
     return null;
   }
   const id = staffObjectId(user);
-  const or: Record<string, unknown>[] = [{ createdBy: id }];
+  const or: Record<string, unknown>[] = [
+    { createdBy: id },
+    // Auction intake is org-shared for operations staff (no lead owner)
+    { auctionId: { $exists: true, $ne: null } },
+  ];
   if (ownedLeadIds.length > 0) {
     or.push({ leadId: { $in: ownedLeadIds } });
   }

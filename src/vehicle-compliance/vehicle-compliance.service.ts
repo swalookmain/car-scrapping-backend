@@ -2,14 +2,16 @@ import {
   BadRequestException,
   Inject,
   Injectable,
+  Logger,
   NotFoundException,
+  OnModuleInit,
+  forwardRef,
 } from '@nestjs/common';
 import { Types } from 'mongoose';
 import { WINSTON_MODULE_NEST_PROVIDER } from 'nest-winston';
 import type { LoggerService } from '@nestjs/common';
 import { sanitizeObject, validateObjectId } from 'src/common/utils/security.util';
 import { OrganizationsService } from 'src/organizations/organizations.service';
-import { VechicleStatus } from 'src/common/enum/vechicleStatus.enum';
 import { AuthenticatedUser } from 'src/common/interface/authenticated-user.interface';
 import { CreateVehicleCodRecordDto } from './dto/create-vehicle-cod-record.dto';
 import { UpdateVehicleCodTrackingDto } from './dto/update-vehicle-cod-tracking.dto';
@@ -24,6 +26,7 @@ import { AuditLogService } from 'src/audit-log/audit-log.service';
 import { AuditAction } from 'src/common/enum/audit.enum';
 import { Role } from 'src/common/enum/role.enum';
 import { LeadService } from 'src/lead/lead.service';
+import { YardService } from 'src/yard/yard.service';
 import {
   andMongoFilters,
   isStaffUser,
@@ -47,11 +50,16 @@ type VehicleComplianceRepoPort = {
     organizationId?: { toString(): string };
     codGenerated?: boolean;
   } | null>;
+  getVehicleCodRecordByYardVehicleId: (yardVehicleId: string) => Promise<{
+    organizationId?: { toString(): string };
+    codGenerated?: boolean;
+  } | null>;
   updateById: (
     id: string,
     updateData: Record<string, unknown>,
   ) => Promise<Record<string, unknown> | null>;
   hasGeneratedCodForVehicle: (vehicleId: string) => Promise<unknown>;
+  ensureVehicleIdPartialUniqueIndex?: () => Promise<string[]>;
   findPaginated: (
     filter: Record<string, unknown>,
     page: number,
@@ -60,7 +68,9 @@ type VehicleComplianceRepoPort = {
 };
 
 @Injectable()
-export class VehicleComplianceService {
+export class VehicleComplianceService implements OnModuleInit {
+  private readonly bootstrapLogger = new Logger(VehicleComplianceService.name);
+
   constructor(
     @Inject(VehicleComplianceRepository)
     private readonly vehicleComplianceRepository: VehicleComplianceRepoPort,
@@ -69,9 +79,30 @@ export class VehicleComplianceService {
     private readonly organizationsService: OrganizationsService,
     private readonly auditLogService: AuditLogService,
     private readonly leadService: LeadService,
+    @Inject(forwardRef(() => YardService))
+    private readonly yardService: YardService,
     @Inject(WINSTON_MODULE_NEST_PROVIDER)
     private readonly logger: LoggerService,
   ) {}
+
+  async onModuleInit() {
+    try {
+      const changed =
+        (await this.vehicleComplianceRepository.ensureVehicleIdPartialUniqueIndex?.()) ||
+        [];
+      if (changed.length) {
+        this.bootstrapLogger.log(
+          `COD vehicleId index migration: ${changed.join(', ')}`,
+        );
+      }
+    } catch (error) {
+      const message =
+        error instanceof Error ? error.message : 'Unknown COD index migration error';
+      this.bootstrapLogger.warn(
+        `Failed to migrate COD vehicleId index: ${message}`,
+      );
+    }
+  }
 
   async createVehicleCodRecord(
     createVehicleCodRecordDto: CreateVehicleCodRecordDto,
@@ -81,48 +112,77 @@ export class VehicleComplianceService {
       const sanitizedData = sanitizeObject(
         createVehicleCodRecordDto,
       ) as CreateVehicleCodRecordDto;
-      const vehicleId = validateObjectId(sanitizedData.vehicleId, 'Vehicle ID');
-      const invoiceId = validateObjectId(sanitizedData.invoiceId, 'Invoice ID');
       const orgId = this.getOrgId(authenticatedUser);
       await this.organizationsService.getById(orgId);
 
-      const [invoiceRaw, vehicleRaw] = await Promise.all([
-        this.invoiceRepository.findById(invoiceId),
-        this.vehicleInvoiceRepository.findById(vehicleId),
-      ]);
-      const invoice = invoiceRaw as
-        | { organizationId?: { toString(): string } }
-        | null;
-      const vehicle = vehicleRaw as
-        | {
-            organizationId?: { toString(): string };
-            invoiceId?: { toString(): string };
-            vechicleStatus?: VechicleStatus;
-          }
-        | null;
+      // Canonical vehicle id = YardVehicle._id
+      const yardVehicleId = validateObjectId(
+        sanitizedData.yardVehicleId,
+        'Yard vehicle ID',
+      );
+      // Optional purchase-invoice links only
+      let vehicleId = sanitizedData.vehicleId
+        ? validateObjectId(sanitizedData.vehicleId, 'Vehicle ID')
+        : undefined;
+      let invoiceId = sanitizedData.invoiceId
+        ? validateObjectId(sanitizedData.invoiceId, 'Invoice ID')
+        : undefined;
 
-      if (!invoice) {
-        throw new NotFoundException('Invoice not found');
+      const yardVehicle = await this.yardService.findOne(
+        yardVehicleId,
+        authenticatedUser,
+      );
+
+      if (!vehicleId && yardVehicle.vehicleInvoiceId) {
+        vehicleId = yardVehicle.vehicleInvoiceId.toString();
       }
-      if (!vehicle) {
-        throw new NotFoundException('Vehicle not found');
-      }
-      if (invoice.organizationId?.toString() !== orgId) {
-        throw new BadRequestException('Invoice does not belong to organization');
-      }
-      if (vehicle.organizationId?.toString() !== orgId) {
-        throw new BadRequestException('Vehicle does not belong to organization');
-      }
-      if (vehicle.invoiceId?.toString() !== invoiceId) {
-        throw new BadRequestException('Vehicle does not belong to invoice');
+      if (!invoiceId && yardVehicle.invoiceId) {
+        invoiceId = yardVehicle.invoiceId.toString();
       }
 
-      const existingCod =
-        await this.vehicleComplianceRepository.getVehicleCodRecordByVehicleId(
-          vehicleId,
+      if (invoiceId && vehicleId) {
+        const [invoice, vehicle] = await Promise.all([
+          this.invoiceRepository.findById(invoiceId),
+          this.vehicleInvoiceRepository.findById(vehicleId),
+        ]);
+        if (invoice && invoice.organizationId?.toString() !== orgId) {
+          throw new BadRequestException(
+            'Invoice does not belong to organization',
+          );
+        }
+        if (vehicle && vehicle.organizationId?.toString() !== orgId) {
+          throw new BadRequestException(
+            'Vehicle does not belong to organization',
+          );
+        }
+        if (
+          invoice &&
+          vehicle &&
+          vehicle.invoiceId?.toString() !== invoiceId
+        ) {
+          throw new BadRequestException('Vehicle does not belong to invoice');
+        }
+      }
+
+      const existingByYard =
+        await this.vehicleComplianceRepository.getVehicleCodRecordByYardVehicleId(
+          yardVehicleId,
         );
-      if (existingCod) {
-        throw new BadRequestException('Compliance record already exists for this vehicle');
+      if (existingByYard) {
+        throw new BadRequestException(
+          'Compliance record already exists for this vehicle',
+        );
+      }
+      if (vehicleId) {
+        const existingByVehicle =
+          await this.vehicleComplianceRepository.getVehicleCodRecordByVehicleId(
+            vehicleId,
+          );
+        if (existingByVehicle) {
+          throw new BadRequestException(
+            'Compliance record already exists for this vehicle',
+          );
+        }
       }
 
       if (sanitizedData.codGenerated) {
@@ -154,8 +214,29 @@ export class VehicleComplianceService {
 
       return this.vehicleComplianceRepository.create({
         organizationId: new Types.ObjectId(orgId),
-        vehicleId: new Types.ObjectId(vehicleId),
-        invoiceId: new Types.ObjectId(invoiceId),
+        yardVehicleId: new Types.ObjectId(yardVehicleId),
+        ...(vehicleId ? { vehicleId: new Types.ObjectId(vehicleId) } : {}),
+        ...(invoiceId ? { invoiceId: new Types.ObjectId(invoiceId) } : {}),
+        ...(yardVehicle.leadId
+          ? { leadId: new Types.ObjectId(yardVehicle.leadId.toString()) }
+          : {}),
+        ...(yardVehicle.auctionId
+          ? { auctionId: new Types.ObjectId(yardVehicle.auctionId.toString()) }
+          : {}),
+        ...(yardVehicle.lotId
+          ? { lotId: new Types.ObjectId(yardVehicle.lotId.toString()) }
+          : {}),
+        ...(yardVehicle.auctionVehicleId
+          ? {
+              auctionVehicleId: new Types.ObjectId(
+                yardVehicle.auctionVehicleId.toString(),
+              ),
+            }
+          : {}),
+        ...(yardVehicle.registrationNumber
+          ? { registrationNumber: yardVehicle.registrationNumber }
+          : {}),
+        createdBy: new Types.ObjectId(authenticatedUser.userId),
         codGenerated: sanitizedData.codGenerated,
         codGeneratedAt,
         codDocumentUrl: sanitizedData.codDocumentUrl,
@@ -425,17 +506,33 @@ export class VehicleComplianceService {
             staffInvoiceOwnerFilter(authenticatedUser, leadIds),
           ),
         );
-        filter.invoiceId = { $in: invoiceIds };
+        const staffScope: Record<string, unknown>[] = [
+          { auctionId: { $exists: true, $ne: null } },
+          { createdBy: new Types.ObjectId(authenticatedUser.userId) },
+        ];
+        if (leadIds.length) {
+          staffScope.push({ leadId: { $in: leadIds } });
+        }
+        if (invoiceIds.length) {
+          staffScope.push({ invoiceId: { $in: invoiceIds } });
+        }
+        filter.$or = staffScope;
       }
 
       if (query.invoiceId) {
         filter.invoiceId = new Types.ObjectId(
           validateObjectId(query.invoiceId, 'Invoice ID'),
         );
+        delete filter.$or;
       }
       if (query.vehicleId) {
         filter.vehicleId = new Types.ObjectId(
           validateObjectId(query.vehicleId, 'Vehicle ID'),
+        );
+      }
+      if (query.yardVehicleId) {
+        filter.yardVehicleId = new Types.ObjectId(
+          validateObjectId(query.yardVehicleId, 'Yard vehicle ID'),
         );
       }
       if (query.codGenerated !== undefined) {

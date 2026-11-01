@@ -24,9 +24,21 @@ export class InventoryRepository extends BaseRepository<InventoryDocument> {
     });
   }
 
+  async findByYardVehicleId(yardVehicleId: string) {
+    return this.inventoryModel.find({
+      yardVehicleId: new Types.ObjectId(yardVehicleId),
+    });
+  }
+
   async existsByVehicleId(vechileId: string) {
     return this.inventoryModel.exists({
       vechileId: new Types.ObjectId(vechileId),
+    });
+  }
+
+  async existsByYardVehicleId(yardVehicleId: string) {
+    return this.inventoryModel.exists({
+      yardVehicleId: new Types.ObjectId(yardVehicleId),
     });
   }
 
@@ -41,7 +53,15 @@ export class InventoryRepository extends BaseRepository<InventoryDocument> {
   }) {
     const skip = (params.page - 1) * params.limit;
     const matchStage: Record<string, unknown> = {};
-    if (params.invoiceIds) {
+    if (params.organizationId) {
+      const orgClauses: Record<string, unknown>[] = [
+        { organizationId: new Types.ObjectId(params.organizationId) },
+      ];
+      if (params.invoiceIds?.length) {
+        orgClauses.push({ invoiceId: { $in: params.invoiceIds } });
+      }
+      matchStage.$or = orgClauses;
+    } else if (params.invoiceIds) {
       matchStage.invoiceId = { $in: params.invoiceIds };
     }
     Object.assign(
@@ -53,11 +73,15 @@ export class InventoryRepository extends BaseRepository<InventoryDocument> {
       { $match: matchStage },
       {
         $group: {
-          _id: '$vechileId',
+          // Canonical vehicle identity is yardVehicleId (legacy rows may only have vechileId)
+          _id: { $ifNull: ['$yardVehicleId', '$vechileId'] },
+          yardVehicleId: { $first: '$yardVehicleId' },
+          vechileId: { $first: '$vechileId' },
           partCount: { $sum: 1 },
           totalWeightKg: { $sum: { $ifNull: ['$weightKg', 0] } },
           invoiceId: { $first: '$invoiceId' },
           purchaseInvoiceNumber: { $first: '$purchaseInvoiceNumber' },
+          registrationNumber: { $first: '$registrationNumber' },
           vechileModel: { $first: '$vechileModel' },
           lastUpdatedAt: { $max: '$updatedAt' },
           createdAt: { $min: '$createdAt' },
@@ -66,22 +90,22 @@ export class InventoryRepository extends BaseRepository<InventoryDocument> {
       {
         $lookup: {
           from: 'vechileinvoices',
-          localField: '_id',
+          localField: 'vechileId',
           foreignField: '_id',
           as: 'vehicle',
         },
       },
       { $unwind: { path: '$vehicle', preserveNullAndEmptyArrays: true } },
-    ];
-
-    if (params.organizationId) {
-      pipeline.push({
-        $match: {
-          'vehicle.organizationId': new Types.ObjectId(params.organizationId),
-          'vehicle.isDeleted': { $ne: true },
+      {
+        $lookup: {
+          from: 'yardvehicles',
+          localField: 'yardVehicleId',
+          foreignField: '_id',
+          as: 'yardVehicle',
         },
-      });
-    }
+      },
+      { $unwind: { path: '$yardVehicle', preserveNullAndEmptyArrays: true } },
+    ];
 
     if (params.search?.trim()) {
       const q = params.search.trim();
@@ -91,6 +115,10 @@ export class InventoryRepository extends BaseRepository<InventoryDocument> {
             { 'vehicle.registration_number': { $regex: q, $options: 'i' } },
             { 'vehicle.make': { $regex: q, $options: 'i' } },
             { 'vehicle.model_name': { $regex: q, $options: 'i' } },
+            { 'yardVehicle.registrationNumber': { $regex: q, $options: 'i' } },
+            { 'yardVehicle.make': { $regex: q, $options: 'i' } },
+            { 'yardVehicle.modelName': { $regex: q, $options: 'i' } },
+            { registrationNumber: { $regex: q, $options: 'i' } },
             { purchaseInvoiceNumber: { $regex: q, $options: 'i' } },
           ],
         },
@@ -105,7 +133,8 @@ export class InventoryRepository extends BaseRepository<InventoryDocument> {
           { $limit: params.limit },
           {
             $project: {
-              vechileId: '$_id',
+              vechileId: 1,
+              yardVehicleId: 1,
               partCount: 1,
               totalWeightKg: 1,
               invoiceId: 1,
@@ -113,12 +142,33 @@ export class InventoryRepository extends BaseRepository<InventoryDocument> {
               vechileModel: 1,
               lastUpdatedAt: 1,
               createdAt: 1,
-              registrationNumber: '$vehicle.registration_number',
-              make: '$vehicle.make',
-              modelName: '$vehicle.model_name',
-              vehicleStatus: '$vehicle.vechicleStatus',
+              registrationNumber: {
+                $ifNull: [
+                  '$registrationNumber',
+                  {
+                    $ifNull: [
+                      '$yardVehicle.registrationNumber',
+                      '$vehicle.registration_number',
+                    ],
+                  },
+                ],
+              },
+              make: {
+                $ifNull: ['$yardVehicle.make', '$vehicle.make'],
+              },
+              modelName: {
+                $ifNull: ['$yardVehicle.modelName', '$vehicle.model_name'],
+              },
+              vehicleStatus: {
+                $ifNull: [
+                  '$yardVehicle.currentStatus',
+                  '$vehicle.vechicleStatus',
+                ],
+              },
               formVehicleClass: '$vehicle.formVehicleClass',
-              grossWeightKg: '$vehicle.grossWeightKg',
+              grossWeightKg: {
+                $ifNull: ['$yardVehicle.grossWeightKg', '$vehicle.grossWeightKg'],
+              },
               vehicleType: '$vehicle.vehicle_type',
             },
           },

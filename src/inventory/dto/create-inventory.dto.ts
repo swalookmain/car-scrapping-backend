@@ -155,13 +155,27 @@ export class CreateInventoryBatchDto {
   @IsOptional()
   dismantledAt?: string;
 
-  @ApiProperty({ description: 'Invoice ID' })
+  @ApiProperty({
+    description:
+      'Canonical vehicle id (YardVehicle). Required for all inventory creates.',
+  })
   @IsMongoId()
-  invoiceId: string;
+  yardVehicleId: string;
 
-  @ApiProperty({ description: 'Vehicle Invoice ID' })
+  @ApiPropertyOptional({
+    description: 'Optional purchase invoice link (not vehicle identity)',
+  })
   @IsMongoId()
-  vechileId: string;
+  @IsOptional()
+  invoiceId?: string;
+
+  @ApiPropertyOptional({
+    description:
+      'Optional legacy purchase vehicle-invoice link (not vehicle identity)',
+  })
+  @IsMongoId()
+  @IsOptional()
+  vechileId?: string;
 
   @ApiProperty({ type: [CreateInventoryItemDto] })
   @IsArray()

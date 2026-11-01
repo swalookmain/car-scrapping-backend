@@ -102,14 +102,16 @@ export class YardController {
     return this.yardService.updateStatus(id, dto, user);
   }
 
-  @Post('vehicles/:vehicleInvoiceId/start-dismantling')
+  @Post('vehicles/:id/start-dismantling')
   @Roles(Role.ADMIN, Role.STAFF)
-  @ApiOperation({ summary: 'Start dismantling for a parked yard vehicle' })
+  @ApiOperation({
+    summary: 'Start dismantling for a parked yard vehicle (by yard vehicle id)',
+  })
   startDismantling(
-    @Param('vehicleInvoiceId') vehicleInvoiceId: string,
+    @Param('id') id: string,
     @GetUser() user: AuthenticatedUser,
   ) {
-    return this.yardService.startDismantling(vehicleInvoiceId, user);
+    return this.yardService.startDismantling(id, user);
   }
 
   @Post('backfill')

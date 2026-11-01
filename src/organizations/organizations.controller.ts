@@ -177,7 +177,7 @@ export class OrganizationsController {
   @SetModule(APP_MODULES.SETTINGS.id)
   @Roles(Role.ADMIN)
   @ApiConsumes('multipart/form-data')
-  @ApiOperation({ summary: 'Upload logo, RVSF logo, or signature' })
+  @ApiOperation({ summary: 'Upload logo, RVSF logo, signature, or stamp' })
   @UseInterceptors(
     FileInterceptor('file', DOCUMENT_UPLOAD_OPTIONS),
   )
@@ -189,12 +189,14 @@ export class OrganizationsController {
     if (!file?.buffer) {
       throw new BadRequestException('File is required');
     }
-    if (!['logo', 'rvsfLogo', 'signature'].includes(assetType)) {
-      throw new BadRequestException('assetType must be logo, rvsfLogo, or signature');
+    if (!['logo', 'rvsfLogo', 'signature', 'stamp'].includes(assetType)) {
+      throw new BadRequestException(
+        'assetType must be logo, rvsfLogo, signature, or stamp',
+      );
     }
     return this.letterSettingsService.uploadAsset(
       user,
-      assetType as 'logo' | 'rvsfLogo' | 'signature',
+      assetType as 'logo' | 'rvsfLogo' | 'signature' | 'stamp',
       {
         originalname: file.originalname,
         mimetype: file.mimetype,

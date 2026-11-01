@@ -88,7 +88,11 @@ describe('LeadService close / invoice / offer', () => {
     );
 
     expect(result?.status).toBe(LeadStatus.CLOSED);
-    expect(yardService.ensureYardEntryForLead).toHaveBeenCalled();
+    expect(yardService.ensureYardEntryForLead).toHaveBeenCalledWith(
+      expect.anything(),
+      admin,
+      { promoteToAwaitingArrival: true },
+    );
     expect(liftingService.createForClosedLead).toHaveBeenCalled();
   });
 

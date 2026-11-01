@@ -129,8 +129,10 @@ export class YardService implements OnModuleInit {
       variant?: string;
       codNumber?: string;
       expectedArrivalAt?: Date;
+      status?: string;
     },
     authenticatedUser: AuthenticatedUser,
+    options?: { promoteToAwaitingArrival?: boolean },
   ) {
     const orgId = this.getOrgId(authenticatedUser);
     const userId = this.getUserId(authenticatedUser);
@@ -140,13 +142,39 @@ export class YardService implements OnModuleInit {
       orgId,
       lead._id.toString(),
     );
-    if (existing) {
-      return existing;
-    }
-
     const registrationNumber = (
       lead.registrationNumber || 'PENDING'
     ).toUpperCase();
+
+    if (existing) {
+      const patch: Record<string, unknown> = {
+        registrationNumber,
+        make: lead.vehicleName,
+        modelName: lead.variant,
+        ...(lead.codNumber ? { codNumber: lead.codNumber } : {}),
+        ...(lead.expectedArrivalAt
+          ? { arrivedAt: lead.expectedArrivalAt }
+          : {}),
+        updatedBy: userId,
+      };
+      if (
+        options?.promoteToAwaitingArrival &&
+        existing.currentStatus === YardVehicleStatus.REGISTERED
+      ) {
+        patch.currentStatus = YardVehicleStatus.AWAITING_ARRIVAL;
+      }
+      await this.yardVehicleRepository.updateById(
+        existing._id.toString(),
+        patch,
+      );
+      return this.yardVehicleRepository.findById(existing._id.toString());
+    }
+
+    // Canonical vehicle id is created when lead vehicle details are first saved
+    const initialStatus = options?.promoteToAwaitingArrival
+      ? YardVehicleStatus.AWAITING_ARRIVAL
+      : YardVehicleStatus.REGISTERED;
+
     const created = await this.yardVehicleRepository.create({
       organizationId: new Types.ObjectId(orgId),
       leadId: lead._id,
@@ -154,7 +182,7 @@ export class YardService implements OnModuleInit {
       make: lead.vehicleName,
       modelName: lead.variant,
       sourceType: YardSourceType.LEAD,
-      currentStatus: YardVehicleStatus.AWAITING_ARRIVAL,
+      currentStatus: initialStatus,
       arrivedAt: lead.expectedArrivalAt,
       codNumber: lead.codNumber,
       createdBy: userId,
@@ -164,13 +192,111 @@ export class YardService implements OnModuleInit {
       orgId,
       yardVehicleId: created._id,
       fromStatus: undefined,
-      toStatus: YardVehicleStatus.AWAITING_ARRIVAL,
+      toStatus: initialStatus,
       performedBy: userId,
-      source: 'LEAD_CLOSED',
-      notes: 'Auto-created when deal closed',
+      source: options?.promoteToAwaitingArrival
+        ? 'LEAD_CLOSED'
+        : 'LEAD_VEHICLE_INSERT',
+      notes: options?.promoteToAwaitingArrival
+        ? 'Promoted / ensured on deal close'
+        : 'Canonical vehicle id created when lead vehicle details saved',
     });
 
     return created;
+  }
+
+  /**
+   * Creates the canonical vehicle id when an auction vehicle is first inserted.
+   * Parking later reuses this same yardVehicleId (does not create a new one).
+   */
+  async ensureYardEntryForAuctionVehicle(
+    vehicle: {
+      _id: Types.ObjectId;
+      auctionId?: Types.ObjectId;
+      lotId?: Types.ObjectId;
+      registrationNumber?: string;
+      vehicleNumber?: string;
+      make?: string;
+      vehicleModel?: string;
+    },
+    authenticatedUser: AuthenticatedUser,
+  ) {
+    const orgId = this.getOrgId(authenticatedUser);
+    const userId = this.getUserId(authenticatedUser);
+    await this.ensureDefaultZones(orgId, userId);
+
+    const auctionVehicleId = vehicle._id.toString();
+    const existing = await this.yardVehicleRepository.findByAuctionVehicleId(
+      orgId,
+      auctionVehicleId,
+    );
+
+    const registrationNumber = (
+      vehicle.registrationNumber ||
+      vehicle.vehicleNumber ||
+      'PENDING'
+    )
+      .trim()
+      .toUpperCase();
+
+    if (existing) {
+      await this.yardVehicleRepository.updateById(existing._id.toString(), {
+        registrationNumber,
+        make: vehicle.make,
+        modelName: vehicle.vehicleModel,
+        auctionId: vehicle.auctionId,
+        lotId: vehicle.lotId,
+        updatedBy: userId,
+      });
+      return this.yardVehicleRepository.findById(existing._id.toString());
+    }
+
+    const created = await this.yardVehicleRepository.create({
+      organizationId: new Types.ObjectId(orgId),
+      registrationNumber,
+      make: vehicle.make,
+      modelName: vehicle.vehicleModel,
+      auctionId: vehicle.auctionId,
+      lotId: vehicle.lotId,
+      auctionVehicleId: vehicle._id,
+      sourceType: YardSourceType.AUCTION,
+      currentStatus: YardVehicleStatus.REGISTERED,
+      createdBy: userId,
+      updatedBy: userId,
+    });
+
+    await this.recordMovement({
+      orgId,
+      yardVehicleId: created._id,
+      fromStatus: undefined,
+      toStatus: YardVehicleStatus.REGISTERED,
+      performedBy: userId,
+      source: 'AUCTION_VEHICLE_INSERT',
+      notes: 'Canonical vehicle id created when auction vehicle details saved',
+    });
+
+    return created;
+  }
+
+  async removeYardEntryForAuctionVehicleIfIdle(
+    organizationId: string,
+    auctionVehicleId: string,
+  ) {
+    const existing = await this.yardVehicleRepository.findByAuctionVehicleId(
+      organizationId,
+      auctionVehicleId,
+    );
+    if (!existing) return;
+    const idle: YardVehicleStatus[] = [
+      YardVehicleStatus.REGISTERED,
+      YardVehicleStatus.AWAITING_ARRIVAL,
+    ];
+    if (!idle.includes(existing.currentStatus)) {
+      throw new BadRequestException(
+        'Cannot delete auction vehicle that is already in yard operations',
+      );
+    }
+    await this.yardVehicleRepository.deleteById(existing._id.toString());
   }
 
   async ensureYardEntriesForInvoice(
@@ -311,6 +437,11 @@ export class YardService implements OnModuleInit {
     }
 
     const allowed: Partial<Record<YardVehicleStatus, YardVehicleStatus[]>> = {
+      [YardVehicleStatus.REGISTERED]: [
+        YardVehicleStatus.AWAITING_ARRIVAL,
+        YardVehicleStatus.GATE_IN,
+        YardVehicleStatus.PARKED,
+      ],
       [YardVehicleStatus.AWAITING_ARRIVAL]: [
         YardVehicleStatus.GATE_IN,
         YardVehicleStatus.PARKED,
@@ -435,6 +566,7 @@ export class YardService implements OnModuleInit {
       createdBy?: unknown;
       leadId?: unknown;
       invoiceId?: unknown;
+      auctionId?: unknown;
     },
     authenticatedUser: AuthenticatedUser,
   ) {
@@ -442,6 +574,10 @@ export class YardService implements OnModuleInit {
       return;
     }
     if (extractIdString(yardVehicle.createdBy) === authenticatedUser.userId) {
+      return;
+    }
+    // Auction yard vehicles are shared with org staff for parking/inventory/COD
+    if (extractIdString(yardVehicle.auctionId)) {
       return;
     }
     const leadIds = await this.leadService.getOwnedLeadIds(authenticatedUser);
@@ -474,10 +610,15 @@ export class YardService implements OnModuleInit {
   ): Promise<PaginatedResponse<unknown>> {
     const orgId = this.getOrgId(authenticatedUser);
     const { page, limit } = getPagination(query.page, query.limit);
+    // REGISTERED = canonical id only (not yet in yard ops). Hide from default board.
+    const statusFilter = query.status
+      ? { currentStatus: query.status }
+      : { currentStatus: { $ne: YardVehicleStatus.REGISTERED } };
+
     const filter = andMongoFilters(
       {
         organizationId: new Types.ObjectId(orgId),
-        ...(query.status ? { currentStatus: query.status } : {}),
+        ...statusFilter,
         ...(query.invoiceId
           ? {
               invoiceId: new Types.ObjectId(
@@ -678,28 +819,15 @@ export class YardService implements OnModuleInit {
   }
 
   async startDismantling(
-    vehicleInvoiceId: string,
+    yardVehicleId: string,
     authenticatedUser: AuthenticatedUser,
   ) {
     const orgId = this.getOrgId(authenticatedUser);
     const userId = this.getUserId(authenticatedUser);
-    const validVehicleInvoiceId = validateObjectId(
-      vehicleInvoiceId,
-      'Vehicle invoice ID',
+    const yardVehicle = await this.getYardVehicleForOrg(
+      validateObjectId(yardVehicleId, 'Yard vehicle ID'),
+      authenticatedUser,
     );
-
-    const yardVehicle = await this.yardVehicleRepository.findByVehicleInvoiceId(
-      validVehicleInvoiceId,
-    );
-    if (!yardVehicle) {
-      throw new NotFoundException(
-        'No yard record for this vehicle. Confirm invoice or run yard backfill.',
-      );
-    }
-    if (!sameOrganization(yardVehicle.organizationId, orgId)) {
-      throw new NotFoundException('Yard vehicle not found');
-    }
-    await this.assertStaffCanAccessYardVehicle(yardVehicle, authenticatedUser);
 
     const fromStatus = yardVehicle.currentStatus;
     const toStatus = YardVehicleStatus.DISMANTLING_IN_PROGRESS;
@@ -715,9 +843,12 @@ export class YardService implements OnModuleInit {
       },
     );
 
-    await this.vehicleInvoiceRepository.updateById(validVehicleInvoiceId, {
-      vechicleStatus: VechicleStatus.DISMANTLING_IN_PROGRESS,
-    });
+    const vehicleInvoiceId = yardVehicle.vehicleInvoiceId?.toString();
+    if (vehicleInvoiceId) {
+      await this.vehicleInvoiceRepository.updateById(vehicleInvoiceId, {
+        vechicleStatus: VechicleStatus.DISMANTLING_IN_PROGRESS,
+      });
+    }
 
     await this.recordMovement({
       orgId,
@@ -741,16 +872,31 @@ export class YardService implements OnModuleInit {
     return updated;
   }
 
+  /** @deprecated Prefer assertCanCreateInventoryByYardVehicleId */
   async assertCanCreateInventory(vehicleInvoiceId: string) {
     const yardVehicle =
       await this.yardVehicleRepository.findByVehicleInvoiceId(vehicleInvoiceId);
     if (!yardVehicle) return;
+    this.assertYardReadyForInventory(yardVehicle.currentStatus);
+  }
 
+  async assertCanCreateInventoryByYardVehicleId(yardVehicleId: string) {
+    const yardVehicle = await this.yardVehicleRepository.findById(yardVehicleId);
+    if (!yardVehicle) {
+      throw new NotFoundException(
+        'No yard record for this vehicle. Park it in Yard first.',
+      );
+    }
+    this.assertYardReadyForInventory(yardVehicle.currentStatus);
+    return yardVehicle;
+  }
+
+  private assertYardReadyForInventory(status: YardVehicleStatus) {
     const allowed: YardVehicleStatus[] = [
       YardVehicleStatus.DISMANTLING_IN_PROGRESS,
       YardVehicleStatus.DISMANTLED,
     ];
-    if (!allowed.includes(yardVehicle.currentStatus)) {
+    if (!allowed.includes(status)) {
       throw new BadRequestException(
         'Vehicle must be in dismantling progress. Start dismantling from Yard or Inventory first.',
       );
@@ -758,20 +904,22 @@ export class YardService implements OnModuleInit {
   }
 
   async completeDismantling(
-    vehicleInvoiceId: string,
+    yardVehicleOrVehicleInvoiceId: string,
     authenticatedUser: AuthenticatedUser,
     dismantledAt?: string,
   ) {
     const orgId = this.getOrgId(authenticatedUser);
     const userId = this.getUserId(authenticatedUser);
-    const validVehicleInvoiceId = validateObjectId(
-      vehicleInvoiceId,
-      'Vehicle invoice ID',
+    const validId = validateObjectId(
+      yardVehicleOrVehicleInvoiceId,
+      'Yard vehicle ID',
     );
 
-    const yardVehicle = await this.yardVehicleRepository.findByVehicleInvoiceId(
-      validVehicleInvoiceId,
-    );
+    let yardVehicle = await this.yardVehicleRepository.findById(validId);
+    if (!yardVehicle) {
+      yardVehicle =
+        await this.yardVehicleRepository.findByVehicleInvoiceId(validId);
+    }
     if (!yardVehicle) return;
 
     if (!sameOrganization(yardVehicle.organizationId, orgId)) {
@@ -779,12 +927,19 @@ export class YardService implements OnModuleInit {
     }
     await this.assertStaffCanAccessYardVehicle(yardVehicle, authenticatedUser);
 
-    const vehicleDoc = await this.vehicleInvoiceRepository.findById(
-      validVehicleInvoiceId,
-    );
-    if (!vehicleDoc?.grossWeightKg && !yardVehicle.grossWeightKg) {
+    const vehicleInvoiceId = yardVehicle.vehicleInvoiceId?.toString();
+    if (vehicleInvoiceId) {
+      const vehicleDoc =
+        await this.vehicleInvoiceRepository.findById(vehicleInvoiceId);
+      if (!vehicleDoc?.grossWeightKg && !yardVehicle.grossWeightKg) {
+        this.logger.warn(
+          `Vehicle ${vehicleInvoiceId} dismantled without grossWeightKg — FORM-3 export will be blocked until set`,
+          'YardService',
+        );
+      }
+    } else if (!yardVehicle.grossWeightKg) {
       this.logger.warn(
-        `Vehicle ${validVehicleInvoiceId} dismantled without grossWeightKg — FORM-3 export will be blocked until set`,
+        `Yard vehicle ${yardVehicle._id.toString()} dismantled without grossWeightKg — FORM-3 export will be blocked until set`,
         'YardService',
       );
     }
@@ -804,9 +959,11 @@ export class YardService implements OnModuleInit {
       updatedBy: userId,
     });
 
-    await this.vehicleInvoiceRepository.updateById(validVehicleInvoiceId, {
-      vechicleStatus: VechicleStatus.DISMANTLED,
-    });
+    if (vehicleInvoiceId) {
+      await this.vehicleInvoiceRepository.updateById(vehicleInvoiceId, {
+        vechicleStatus: VechicleStatus.DISMANTLED,
+      });
+    }
 
     await this.recordMovement({
       orgId,
@@ -896,8 +1053,18 @@ export class YardService implements OnModuleInit {
         orgId,
         vehicleIds,
       );
-    const inYardSet = new Set(
+    // Vehicle id exists from auction insert (REGISTERED). "Already in yard"
+    // means physically parked / beyond — still allow parking REGISTERED rows.
+    const parkedStatuses = new Set<YardVehicleStatus>([
+      YardVehicleStatus.GATE_IN,
+      YardVehicleStatus.PARKED,
+      YardVehicleStatus.DISMANTLING_IN_PROGRESS,
+      YardVehicleStatus.DISMANTLED,
+      YardVehicleStatus.EXITED,
+    ]);
+    const alreadyParkedSet = new Set(
       existingYard
+        .filter((y) => parkedStatuses.has(y.currentStatus))
         .map((y) => y.auctionVehicleId?.toString())
         .filter(Boolean) as string[],
     );
@@ -940,7 +1107,11 @@ export class YardService implements OnModuleInit {
                 model: v.vehicleModel || '',
                 variant: v.variant || '',
                 vehicleType: v.vehicleType || '',
-                alreadyInYard: inYardSet.has(id),
+                alreadyInYard: alreadyParkedSet.has(id),
+                yardVehicleId:
+                  existingYard
+                    .find((y) => y.auctionVehicleId?.toString() === id)
+                    ?._id?.toString() || null,
               };
             }),
           };
@@ -1017,24 +1188,19 @@ export class YardService implements OnModuleInit {
         orgId,
         targets.map((v) => v._id.toString()),
       );
-    const alreadySet = new Set(
+    const existingByAuction = new Map(
       existingYard
-        .map((y) => y.auctionVehicleId?.toString())
-        .filter(Boolean) as string[],
+        .filter((y) => y.auctionVehicleId)
+        .map((y) => [y.auctionVehicleId!.toString(), y]),
     );
 
     const toZoneId = new Types.ObjectId(zoneId);
     const now = new Date();
-    const created: unknown[] = [];
+    const parked: unknown[] = [];
     let skipped = 0;
 
     for (const vehicle of targets) {
       const auctionVehicleId = vehicle._id.toString();
-      if (alreadySet.has(auctionVehicleId)) {
-        skipped += 1;
-        continue;
-      }
-
       const registrationNumber = (
         vehicle.registrationNumber ||
         vehicle.vehicleNumber ||
@@ -1047,29 +1213,53 @@ export class YardService implements OnModuleInit {
       }
 
       try {
-        const yardRow = await this.yardVehicleRepository.create({
-          organizationId: new Types.ObjectId(orgId),
-          registrationNumber,
-          make: vehicle.make,
-          modelName: vehicle.vehicleModel,
-          auctionId: vehicle.auctionId,
-          lotId: vehicle.lotId,
-          auctionVehicleId: vehicle._id,
-          sourceType: YardSourceType.AUCTION,
-          currentStatus: YardVehicleStatus.PARKED,
-          currentZoneId: toZoneId,
-          currentSlot: sanitized.slot?.trim() || undefined,
-          parkedAt: now,
-          grossWeightKg: sanitized.grossWeightKg,
-          remarks: sanitized.notes?.trim() || undefined,
-          createdBy: userId,
-          updatedBy: userId,
-        });
+        let yardRow = existingByAuction.get(auctionVehicleId);
+        // Ensure canonical vehicle exists (id created at auction insert)
+        if (!yardRow) {
+          const ensured = await this.ensureYardEntryForAuctionVehicle(
+            vehicle,
+            authenticatedUser,
+          );
+          if (!ensured) {
+            throw new BadRequestException(
+              `Failed to resolve yard vehicle for auction vehicle ${auctionVehicleId}`,
+            );
+          }
+          yardRow = ensured;
+        }
+
+        if (yardRow.currentStatus === YardVehicleStatus.PARKED) {
+          skipped += 1;
+          continue;
+        }
+
+        const fromStatus = yardRow.currentStatus;
+        this.assertTransition(fromStatus, YardVehicleStatus.PARKED);
+
+        const updated = await this.yardVehicleRepository.updateById(
+          yardRow._id.toString(),
+          {
+            currentStatus: YardVehicleStatus.PARKED,
+            currentZoneId: toZoneId,
+            currentSlot: sanitized.slot?.trim() || undefined,
+            parkedAt: now,
+            ...(sanitized.grossWeightKg !== undefined
+              ? { grossWeightKg: sanitized.grossWeightKg }
+              : {}),
+            ...(sanitized.notes?.trim()
+              ? { remarks: sanitized.notes.trim() }
+              : {}),
+            registrationNumber: registrationNumber.toUpperCase(),
+            make: vehicle.make,
+            modelName: vehicle.vehicleModel,
+            updatedBy: userId,
+          },
+        );
 
         await this.recordMovement({
           orgId,
           yardVehicleId: yardRow._id,
-          fromStatus: undefined,
+          fromStatus,
           toStatus: YardVehicleStatus.PARKED,
           toZoneId,
           toSlot: sanitized.slot,
@@ -1083,7 +1273,7 @@ export class YardService implements OnModuleInit {
           AuditAction.YARD_STATUS_UPDATE,
           yardRow._id.toString(),
           {
-            fromStatus: null,
+            fromStatus,
             toStatus: YardVehicleStatus.PARKED,
             source: 'AUCTION_MANUAL_PARK',
             lotId,
@@ -1091,8 +1281,14 @@ export class YardService implements OnModuleInit {
           },
         );
 
-        created.push(yardRow);
+        parked.push(updated || yardRow);
       } catch (error) {
+        if (
+          error instanceof BadRequestException ||
+          error instanceof NotFoundException
+        ) {
+          throw error;
+        }
         const message = error instanceof Error ? error.message : String(error);
         if (message.includes('E11000') && message.includes('auctionVehicleId')) {
           skipped += 1;
@@ -1108,10 +1304,10 @@ export class YardService implements OnModuleInit {
     }
 
     return {
-      message: `Parked ${created.length} vehicle(s)${skipped ? `, skipped ${skipped} already in yard` : ''}`,
-      created: created.length,
+      message: `Parked ${parked.length} vehicle(s)${skipped ? `, skipped ${skipped} already parked` : ''}`,
+      created: parked.length,
       skipped,
-      vehicles: created,
+      vehicles: parked,
     };
   }
 }

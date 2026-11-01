@@ -52,14 +52,21 @@ export class DamageAdjustmentsService {
     if (!inventory) {
       throw new NotFoundException('Inventory part not found');
     }
-    const invoice = await this.invoiceRepo.findById(inventory.invoiceId.toString());
-    if (!invoice) {
-      throw new NotFoundException('Invoice not found for inventory part');
-    }
-    if (invoice.organizationId?.toString() !== orgId) {
+    if (inventory.organizationId?.toString() !== orgId) {
       throw new BadRequestException(
         'Inventory part does not belong to organization',
       );
+    }
+    // Purchase invoice is optional — only validate when linked
+    if (inventory.invoiceId) {
+      const invoice = await this.invoiceRepo.findById(
+        inventory.invoiceId.toString(),
+      );
+      if (invoice && invoice.organizationId?.toString() !== orgId) {
+        throw new BadRequestException(
+          'Inventory part does not belong to organization',
+        );
+      }
     }
 
     const previousCondition = inventory.condition;

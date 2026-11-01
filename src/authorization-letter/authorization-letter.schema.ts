@@ -13,14 +13,32 @@ export class AuthorizationLetterLotSnapshot {
   @Prop({ trim: true })
   deliveryOrderNumber?: string;
 
-  @Prop({ type: Date, required: true })
-  lastLiftingDate: Date;
+  @Prop({ type: Date })
+  lastLiftingDate?: Date;
 
   @Prop({ type: Number, required: true })
   vehicleCount: number;
 
   @Prop({ required: true, trim: true })
   displayLabel: string;
+
+  @Prop({ trim: true })
+  auctionDetails?: string;
+
+  @Prop({ trim: true })
+  description?: string;
+
+  @Prop({ trim: true })
+  datesOfLifting?: string;
+
+  @Prop({ trim: true })
+  liftingDistrict?: string;
+
+  @Prop({ trim: true })
+  liftingState?: string;
+
+  @Prop({ trim: true })
+  elvDetails?: string;
 }
 
 @Schema({ timestamps: true })
@@ -42,7 +60,7 @@ export class AuthorizationLetter extends Document {
 
   @Prop({
     enum: AuthorizationLetterType,
-    default: AuthorizationLetterType.EXTENSION_LIFTING,
+    default: AuthorizationLetterType.AUTHORIZATION_DELIVERY,
   })
   letterType: AuthorizationLetterType;
 
@@ -58,8 +76,20 @@ export class AuthorizationLetter extends Document {
   @Prop({ trim: true })
   recipientPinCode?: string;
 
-  @Prop({ type: Number, required: true, min: 1 })
-  extensionDays: number;
+  /** Authorized representative who will take delivery */
+  @Prop({ required: true, trim: true })
+  authorizedPersonName: string;
+
+  /** Aadhaar / other ID proof number */
+  @Prop({ required: true, trim: true })
+  authorizedPersonIdProof: string;
+
+  @Prop({ type: Date })
+  letterDate?: Date;
+
+  /** Legacy field — unused by delivery-authorization template */
+  @Prop({ type: Number, min: 1, default: 1 })
+  extensionDays?: number;
 
   @Prop({ trim: true })
   auctionNumber?: string;

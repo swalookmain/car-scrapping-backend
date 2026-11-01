@@ -19,6 +19,11 @@ export class QueryVehicleCodRecordDto extends PaginationQueryDto {
   @IsOptional()
   vehicleId?: string;
 
+  @ApiPropertyOptional({ description: 'Filter by yard vehicle ID' })
+  @IsMongoId()
+  @IsOptional()
+  yardVehicleId?: string;
+
   @ApiPropertyOptional({
     description: 'Filter by COD generated status',
     enum: ['true', 'false'],

@@ -177,7 +177,7 @@ export class AuctionController {
     @Param('lotId') lotId: string,
     @Body() createAuctionVehicleDto: CreateAuctionVehicleDto,
     @GetUser() authenticatedUser: AuthenticatedUser,
-  ) {
+  ): Promise<Record<string, unknown>> {
     return this.auctionService.addVehicle(
       lotId,
       createAuctionVehicleDto,

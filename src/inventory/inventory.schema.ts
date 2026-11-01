@@ -36,14 +36,29 @@ export class InventoryAttachment {
 
 @Schema({ timestamps: true })
 export class Inventory extends Document {
-  @Prop({ type: Types.ObjectId, ref: 'Invoice', required: true })
-  invoiceId: Types.ObjectId;
+  @Prop({ type: Types.ObjectId, ref: 'organizations', required: true })
+  organizationId: Types.ObjectId;
 
-  @Prop({ type: String, required: true })
-  purchaseInvoiceNumber: string;
+  /**
+   * Canonical vehicle identity for the whole system (lead/auction/invoice).
+   * One physical vehicle → one YardVehicle → this id used on inventory/COD/sales.
+   */
+  @Prop({ type: Types.ObjectId, ref: 'YardVehicle', required: true })
+  yardVehicleId: Types.ObjectId;
 
-  @Prop({ type: Types.ObjectId, ref: 'VechileInvoice', required: true })
-  vechileId: Types.ObjectId;
+  /** Optional purchase-invoice link only (not vehicle identity) */
+  @Prop({ type: Types.ObjectId, ref: 'Invoice' })
+  invoiceId?: Types.ObjectId;
+
+  @Prop({ type: String })
+  purchaseInvoiceNumber?: string;
+
+  /** Optional legacy purchase vehicle-invoice row (not vehicle identity) */
+  @Prop({ type: Types.ObjectId, ref: 'VechileInvoice' })
+  vechileId?: Types.ObjectId;
+
+  @Prop({ type: Types.ObjectId, ref: 'Lead' })
+  leadId?: Types.ObjectId;
 
   @Prop({ type: Types.ObjectId, ref: 'Auction' })
   auctionId?: Types.ObjectId;
@@ -53,6 +68,9 @@ export class Inventory extends Document {
 
   @Prop({ type: Types.ObjectId, ref: 'AuctionVehicle' })
   auctionVehicleId?: Types.ObjectId;
+
+  @Prop({ type: String, trim: true })
+  registrationNumber?: string;
 
   @Prop({ type: String, required: true })
   partName: string;
@@ -138,6 +156,9 @@ export class Inventory extends Document {
 export const InventorySchema = SchemaFactory.createForClass(Inventory);
 export type InventoryDocument = Inventory & Document;
 
+InventorySchema.index({ organizationId: 1, createdAt: -1 });
 InventorySchema.index({ vechileId: 1, createdAt: 1 });
+InventorySchema.index({ yardVehicleId: 1, createdAt: 1 });
 InventorySchema.index({ materialCode: 1, formBucket: 1, createdAt: 1 });
 InventorySchema.index({ invoiceId: 1 });
+InventorySchema.index({ leadId: 1 });

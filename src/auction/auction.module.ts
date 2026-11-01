@@ -1,4 +1,4 @@
-import { Module } from '@nestjs/common';
+import { Module, forwardRef } from '@nestjs/common';
 import { MongooseModule } from '@nestjs/mongoose';
 import { AuctionController } from './auction.controller';
 import { AuctionService } from './auction.service';
@@ -28,11 +28,13 @@ import { LotDocument, LotDocumentSchema } from './lifecycle/schemas/lot-document
 import { LotPaymentRecordRepository } from './lifecycle/repositories/lot-payment-record.repository';
 import { LotLifecycleEventRepository } from './lifecycle/repositories/lot-lifecycle-event.repository';
 import { LotDocumentRepository } from './lifecycle/repositories/lot-document.repository';
+import { YardModule } from 'src/yard/yard.module';
 
 @Module({
   imports: [
     NotificationModule,
     OrganizationsModule,
+    forwardRef(() => YardModule),
     MongooseModule.forFeature([
       { name: Auction.name, schema: AuctionSchema },
       { name: AuctionLot.name, schema: AuctionLotSchema },

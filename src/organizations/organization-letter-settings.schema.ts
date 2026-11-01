@@ -48,6 +48,10 @@ export class OrganizationLetterSettings {
   @Prop({ trim: true, default: '' })
   signatureUrl: string;
 
+  /** Optional company stamp image shown near signature */
+  @Prop({ trim: true, default: '' })
+  stampUrl: string;
+
   @Prop({ trim: true, default: 'MSTC BUYER REF. NO.' })
   buyerRefLabel: string;
 }

@@ -1,9 +1,11 @@
 import {
   BadRequestException,
+  Inject,
   Injectable,
   Logger,
   NotFoundException,
   OnModuleInit,
+  forwardRef,
 } from '@nestjs/common';
 import { Types } from 'mongoose';
 import { AuthenticatedUser } from 'src/common/interface/authenticated-user.interface';
@@ -32,6 +34,7 @@ import { AuctionVehicleImageType } from './auction-vehicle-document.schema';
 import { LifecycleStateService } from './lifecycle/lifecycle-state.service';
 import { LotOutcomeStatus } from 'src/common/enum/lotOutcomeStatus.enum';
 import { isStaffUser, staffObjectId } from 'src/common/access/data-scope';
+import { YardService } from 'src/yard/yard.service';
 
 @Injectable()
 export class AuctionService implements OnModuleInit {
@@ -46,6 +49,8 @@ export class AuctionService implements OnModuleInit {
     private readonly invoiceRepository: InvoiceRepository,
     private readonly auctionVehicleDocumentRepository: AuctionVehicleDocumentRepository,
     private readonly storageService: StorageService,
+    @Inject(forwardRef(() => YardService))
+    private readonly yardService: YardService,
   ) {}
 
   async onModuleInit() {
@@ -552,7 +557,7 @@ export class AuctionService implements OnModuleInit {
     lotId: string,
     createAuctionVehicleDto: CreateAuctionVehicleDto,
     authenticatedUser: AuthenticatedUser,
-  ) {
+  ): Promise<Record<string, unknown>> {
     const orgId = this.getOrgId(authenticatedUser);
     const validatedLotId = validateObjectId(lotId, 'Lot ID');
     const lot = await this.auctionLotRepository.findByOrgAndId(orgId, validatedLotId);
@@ -583,15 +588,26 @@ export class AuctionService implements OnModuleInit {
       createdBy: new Types.ObjectId(authenticatedUser.userId),
       updatedBy: new Types.ObjectId(authenticatedUser.userId),
     });
+    // Canonical vehicle id created at auction vehicle insert
+    const yardVehicle = await this.yardService.ensureYardEntryForAuctionVehicle(
+      vehicle,
+      authenticatedUser,
+    );
     await this.syncAuctionInvoiceMapping(lot.auctionId.toString(), orgId);
-    return vehicle;
+    const plain =
+      (vehicle as { toObject?: () => Record<string, unknown> }).toObject?.() ||
+      (vehicle as unknown as Record<string, unknown>);
+    return {
+      ...plain,
+      yardVehicleId: yardVehicle?._id,
+    };
   }
 
   async addVehiclesBatch(
     lotId: string,
     createAuctionVehicleBatchDto: CreateAuctionVehicleBatchDto,
     authenticatedUser: AuthenticatedUser,
-  ) {
+  ): Promise<Record<string, unknown>[]> {
     const orgId = this.getOrgId(authenticatedUser);
     const validatedLotId = validateObjectId(lotId, 'Lot ID');
     const lot = await this.auctionLotRepository.findByOrgAndId(orgId, validatedLotId);
@@ -610,9 +626,13 @@ export class AuctionService implements OnModuleInit {
       validatedLotId,
     );
     for (const existingVehicle of existingVehicles) {
+      await this.yardService.removeYardEntryForAuctionVehicleIfIdle(
+        orgId,
+        existingVehicle._id.toString(),
+      );
       await this.auctionVehicleRepository.deleteById(existingVehicle._id.toString());
     }
-    const created: unknown[] = [];
+    const created: Record<string, unknown>[] = [];
     for (const vehicle of vehicles) {
       this.validateVehiclePayload(vehicle);
       const plate = this.normalizeAuctionVehiclePlate(vehicle);
@@ -632,7 +652,17 @@ export class AuctionService implements OnModuleInit {
         createdBy: new Types.ObjectId(authenticatedUser.userId),
         updatedBy: new Types.ObjectId(authenticatedUser.userId),
       });
-      created.push(createdVehicle);
+      const yardVehicle = await this.yardService.ensureYardEntryForAuctionVehicle(
+        createdVehicle,
+        authenticatedUser,
+      );
+      const plain =
+        (createdVehicle as { toObject?: () => Record<string, unknown> }).toObject?.() ||
+        (createdVehicle as unknown as Record<string, unknown>);
+      created.push({
+        ...plain,
+        yardVehicleId: yardVehicle?._id,
+      });
     }
     await this.syncAuctionInvoiceMapping(lot.auctionId.toString(), orgId);
     return created;
@@ -671,6 +701,12 @@ export class AuctionService implements OnModuleInit {
       updatedBy: new Types.ObjectId(authenticatedUser.userId),
     });
     const vehicle = await this.auctionVehicleRepository.findById(validatedVehicleId);
+    if (vehicle) {
+      await this.yardService.ensureYardEntryForAuctionVehicle(
+        vehicle,
+        authenticatedUser,
+      );
+    }
     const auctionId = vehicle?.auctionId?.toString();
     if (auctionId) {
       await this.syncAuctionInvoiceMapping(auctionId, orgId);
@@ -700,6 +736,10 @@ export class AuctionService implements OnModuleInit {
         lot._id.toString(),
       );
       for (const vehicle of vehicles) {
+        await this.yardService.removeYardEntryForAuctionVehicleIfIdle(
+          orgId,
+          vehicle._id.toString(),
+        );
         await this.auctionVehicleRepository.deleteById(vehicle._id.toString());
       }
       await this.auctionLotRepository.deleteById(lot._id.toString());
@@ -716,6 +756,10 @@ export class AuctionService implements OnModuleInit {
     await this.assertAuctionEditable(lot.auctionId.toString(), orgId);
     const vehicles = await this.auctionVehicleRepository.findByLot(orgId, validatedLotId);
     for (const vehicle of vehicles) {
+      await this.yardService.removeYardEntryForAuctionVehicleIfIdle(
+        orgId,
+        vehicle._id.toString(),
+      );
       await this.auctionVehicleRepository.deleteById(vehicle._id.toString());
     }
     await this.auctionLotRepository.deleteById(validatedLotId);
@@ -729,6 +773,10 @@ export class AuctionService implements OnModuleInit {
     const vehicle = await this.auctionVehicleRepository.findById(validatedVehicleId);
     if (!vehicle) throw new NotFoundException('Vehicle not found');
     await this.assertAuctionEditable(vehicle.auctionId.toString(), orgId);
+    await this.yardService.removeYardEntryForAuctionVehicleIfIdle(
+      orgId,
+      validatedVehicleId,
+    );
     await this.auctionVehicleRepository.deleteById(validatedVehicleId);
     await this.syncAuctionInvoiceMapping(vehicle.auctionId.toString(), orgId);
     return { message: 'Vehicle deleted successfully' };
