@@ -68,11 +68,11 @@ export class YardService implements OnModuleInit {
 
   async onModuleInit() {
     try {
-      const changed =
+      const invoiceChanged =
         await this.yardVehicleRepository.ensureVehicleInvoicePartialUniqueIndex();
-      if (changed.length > 0) {
+      if (invoiceChanged.length > 0) {
         this.bootstrapLogger.warn(
-          `Yard vehicleInvoiceId index migration: ${changed.join(', ')}`,
+          `Yard vehicleInvoiceId index migration: ${invoiceChanged.join(', ')}`,
         );
       }
     } catch (error) {
@@ -80,6 +80,22 @@ export class YardService implements OnModuleInit {
         error instanceof Error ? error.message : 'Unknown yard index migration error';
       this.bootstrapLogger.error(
         `Failed to migrate yard vehicleInvoiceId index: ${message}`,
+      );
+    }
+
+    try {
+      const leadChanged =
+        await this.yardVehicleRepository.ensureLeadIdPartialUniqueIndex();
+      if (leadChanged.length > 0) {
+        this.bootstrapLogger.warn(
+          `Yard leadId index migration: ${leadChanged.join(', ')}`,
+        );
+      }
+    } catch (error) {
+      const message =
+        error instanceof Error ? error.message : 'Unknown yard index migration error';
+      this.bootstrapLogger.error(
+        `Failed to migrate yard leadId index: ${message}`,
       );
     }
   }
@@ -1297,6 +1313,11 @@ export class YardService implements OnModuleInit {
         if (message.includes('E11000') && message.includes('vehicleInvoiceId')) {
           throw new BadRequestException(
             'Yard index still blocks auction parking without invoice. Restart the API so index migration can run, then retry.',
+          );
+        }
+        if (message.includes('E11000') && message.includes('leadId')) {
+          throw new BadRequestException(
+            'Yard index still blocks auction parking without lead. Restart the API so index migration can run, then retry.',
           );
         }
         throw error;

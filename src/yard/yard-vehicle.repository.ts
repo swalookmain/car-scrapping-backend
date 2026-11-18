@@ -62,6 +62,54 @@ export class YardVehicleRepository extends BaseRepository<YardVehicleDocument> {
     return changed;
   }
 
+  /**
+   * Same class of bug as vehicleInvoiceId: sparse unique on leadId still indexes
+   * leadId:null, so only one auction (no-lead) yard vehicle can exist per org.
+   */
+  async ensureLeadIdPartialUniqueIndex(): Promise<string[]> {
+    const changed: string[] = [];
+
+    const unsetResult = await this.model.updateMany(
+      { leadId: null },
+      { $unset: { leadId: '' } },
+    );
+    if (unsetResult.modifiedCount > 0) {
+      changed.push(`unset-null:${unsetResult.modifiedCount}`);
+    }
+
+    const indexes = await this.model.collection.indexes();
+    const desiredName = 'organizationId_leadId_partial_unique';
+
+    for (const index of indexes) {
+      const key = index.key as Record<string, number> | undefined;
+      if (!key || key.organizationId !== 1 || key.leadId !== 1) continue;
+      if (Object.keys(key).length !== 2) continue;
+      if (index.name === desiredName) continue;
+      if (index.name) {
+        await this.model.collection.dropIndex(index.name);
+        changed.push(`dropped:${index.name}`);
+      }
+    }
+
+    const remaining = await this.model.collection.indexes();
+    const hasDesired = remaining.some((index) => index.name === desiredName);
+    if (!hasDesired) {
+      await this.model.collection.createIndex(
+        { organizationId: 1, leadId: 1 },
+        {
+          unique: true,
+          name: desiredName,
+          partialFilterExpression: {
+            leadId: { $exists: true, $type: 'objectId' },
+          },
+        },
+      );
+      changed.push(`created:${desiredName}`);
+    }
+
+    return changed;
+  }
+
   findByVehicleInvoiceId(vehicleInvoiceId: string) {
     return this.model.findOne({
       vehicleInvoiceId: new Types.ObjectId(vehicleInvoiceId),

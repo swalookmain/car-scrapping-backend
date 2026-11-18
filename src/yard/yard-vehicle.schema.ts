@@ -115,7 +115,14 @@ YardVehicleSchema.index(
 );
 YardVehicleSchema.index({ organizationId: 1, currentStatus: 1 });
 YardVehicleSchema.index({ organizationId: 1, registrationNumber: 1 });
+/** Unique only when linked to a lead; auction intake has no leadId */
 YardVehicleSchema.index(
   { organizationId: 1, leadId: 1 },
-  { unique: true, sparse: true },
+  {
+    unique: true,
+    name: 'organizationId_leadId_partial_unique',
+    partialFilterExpression: {
+      leadId: { $exists: true, $type: 'objectId' },
+    },
+  },
 );
