@@ -315,10 +315,15 @@ export class AuctionService implements OnModuleInit {
           lots,
           !!auction.cancelledAt,
         );
+        const nextStep = this.lifecycleStateService.deriveAuctionNextStep(
+          lots,
+          !!auction.cancelledAt,
+        );
         return {
           ...auction.toObject(),
           auctionSummary,
           availableActions,
+          nextStep,
         };
       }),
     );

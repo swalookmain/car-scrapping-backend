@@ -28,6 +28,7 @@ import { LeadService } from 'src/lead/lead.service';
 import { LiftingService } from 'src/lifting/lifting.service';
 import { BooksPeriodService } from 'src/organizations/books-period.service';
 import { LotOutcomeStatus } from 'src/common/enum/lotOutcomeStatus.enum';
+import { getYardReadiness } from 'src/auction/lifecycle/lot-journey.util';
 import {
   andMongoFilters,
   isStaffUser,
@@ -719,6 +720,31 @@ export class YardService implements OnModuleInit {
     );
   }
 
+  /**
+   * Auction vehicles may only enter the yard (GATE_IN / PARKED) once their lot
+   * is Deal Done, fully paid, and has a gate pass uploaded. Applies to every
+   * path that moves a vehicle into the yard, not only "add from auction".
+   */
+  private async assertAuctionLotReadyForYard(
+    orgId: string,
+    yardVehicle: { sourceType?: string; lotId?: Types.ObjectId | string | null },
+  ) {
+    if (yardVehicle.sourceType !== YardSourceType.AUCTION || !yardVehicle.lotId) {
+      return;
+    }
+    const lot = await this.auctionLotRepository.findByOrgAndId(
+      orgId,
+      yardVehicle.lotId.toString(),
+    );
+    if (!lot) {
+      throw new NotFoundException('Auction lot not found');
+    }
+    const readiness = getYardReadiness(lot);
+    if (!readiness.ready) {
+      throw new BadRequestException(readiness.blockedReason);
+    }
+  }
+
   async updateStatus(
     id: string,
     dto: UpdateYardVehicleStatusDto,
@@ -748,6 +774,12 @@ export class YardService implements OnModuleInit {
 
     if (fromStatus !== toStatus) {
       this.assertTransition(fromStatus, toStatus);
+      if (
+        toStatus === YardVehicleStatus.GATE_IN ||
+        toStatus === YardVehicleStatus.PARKED
+      ) {
+        await this.assertAuctionLotReadyForYard(orgId, yardVehicle);
+      }
     }
 
     if (toStatus === YardVehicleStatus.PARKED && !sanitized.zoneId && fromStatus !== toStatus) {
@@ -1113,6 +1145,8 @@ export class YardService implements OnModuleInit {
             lotName: lot.lotName,
             vehicleCount: lot.vehicleCount,
             outcomeStatus: lot.outcomeStatus,
+            readyForYard: getYardReadiness(lot).ready,
+            blockedReason: getYardReadiness(lot).blockedReason ?? null,
             vehicles: lotVehicles.map((v) => {
               const id = v._id.toString();
               return {
@@ -1165,6 +1199,10 @@ export class YardService implements OnModuleInit {
       throw new BadRequestException(
         'Only confirmed (DEAL_DONE) lots can be added to the yard',
       );
+    }
+    const readiness = getYardReadiness(lot);
+    if (!readiness.ready) {
+      throw new BadRequestException(readiness.blockedReason);
     }
 
     const zone = await this.yardZoneRepository.findById(zoneId);

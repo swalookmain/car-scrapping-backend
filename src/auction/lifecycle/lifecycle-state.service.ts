@@ -2,6 +2,13 @@ import { Injectable } from '@nestjs/common';
 import { LotOutcomeStatus } from 'src/common/enum/lotOutcomeStatus.enum';
 import { LotPaymentStatus } from 'src/common/enum/lotPaymentStatus.enum';
 import { AuctionLotDocument } from '../auction-lot.schema';
+import {
+  AuctionNextStep,
+  JourneyLotInput,
+  LotJourney,
+  deriveAuctionNextStep,
+  deriveLotJourney,
+} from './lot-journey.util';
 
 export const LIFECYCLE_ACTIONS = {
   UPDATE_LOT_STATUS: 'UPDATE_LOT_STATUS',
@@ -87,6 +94,19 @@ export class LifecycleStateService {
       actions.push(LIFECYCLE_ACTIONS.ADD_GATE_PASS);
     }
     return actions;
+  }
+
+  /** Per-lot ordered steps with locked reasons, next step and yard readiness */
+  deriveLotJourney(lot: JourneyLotInput): LotJourney {
+    return deriveLotJourney(lot);
+  }
+
+  /** Auction row summary: what the least-advanced open lot needs next */
+  deriveAuctionNextStep(
+    lots: JourneyLotInput[],
+    auctionCancelled: boolean,
+  ): AuctionNextStep {
+    return deriveAuctionNextStep(lots, auctionCancelled);
   }
 
   isLotOutcomeEditable(outcomeStatus: LotOutcomeStatus): boolean {

@@ -24,6 +24,7 @@ import { UpdateLotDeliveryDto } from './dto/update-lot-delivery.dto';
 import { UpdateLotRcmDto } from './dto/update-lot-rcm.dto';
 import { AddLotPenaltyDto } from './dto/add-lot-penalty.dto';
 import { LifecycleStateService } from './lifecycle-state.service';
+import type { JourneyLotInput } from './lot-journey.util';
 import { LotPaymentRecordRepository } from './repositories/lot-payment-record.repository';
 import { LotLifecycleEventRepository } from './repositories/lot-lifecycle-event.repository';
 import { LotDocumentRepository } from './repositories/lot-document.repository';
@@ -118,13 +119,18 @@ export class LifecycleService {
     gatePassDocumentUrl?: string,
     locked = false,
   ) {
-    const obj = lot.toObject();
+    const obj = lot.toObject() as unknown as JourneyLotInput & Record<string, unknown>;
+    const journey = this.lifecycleStateService.deriveLotJourney(obj);
     return {
       ...obj,
       locked,
       editable: this.lifecycleStateService.isLotOutcomeEditable(lot.outcomeStatus),
       payments,
       gatePassDocumentUrl,
+      journey: journey.steps,
+      nextStep: journey.nextStep,
+      readyForYard: journey.readyForYard,
+      yardBlockedReason: journey.yardBlockedReason,
     };
   }
 

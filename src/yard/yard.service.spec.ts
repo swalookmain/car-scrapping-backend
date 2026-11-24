@@ -226,6 +226,8 @@ describe('YardService canonical vehicle id', () => {
     auctionLotRepository.findByOrgAndId.mockResolvedValue({
       _id: lotId,
       outcomeStatus: 'DEAL_DONE',
+      payment: { paymentStatus: 'PAID' },
+      gatePass: { documentId: new Types.ObjectId() },
     });
     yardZoneRepository.findAllByFilter.mockResolvedValue([{ _id: zoneId }]);
     // zone lookup by id — add findById for zones used in addFromAuction
@@ -277,6 +279,139 @@ describe('YardService canonical vehicle id', () => {
     );
     expect(result.created).toBe(1);
     expect(result.skipped).toBe(0);
+  });
+
+  describe('auction yard gate (fully paid + gate pass)', () => {
+    const lotId = new Types.ObjectId();
+    const zoneId = new Types.ObjectId();
+    const auctionVehicleId = new Types.ObjectId();
+
+    const setupParkRequest = (lot: Record<string, unknown>) => {
+      auctionLotRepository.findByOrgAndId.mockResolvedValue({
+        _id: lotId,
+        outcomeStatus: 'DEAL_DONE',
+        ...lot,
+      });
+      (yardZoneRepository as { findById?: jest.Mock }).findById = jest
+        .fn()
+        .mockResolvedValue({ _id: zoneId, organizationId: orgId });
+      auctionVehicleRepository.findByLot.mockResolvedValue([
+        {
+          _id: auctionVehicleId,
+          registrationNumber: 'MH14CD5678',
+          make: 'Honda',
+          vehicleModel: 'City',
+        },
+      ]);
+      yardVehicleRepository.findByAuctionVehicleIds.mockResolvedValue([]);
+    };
+
+    const parkDto = () => ({
+      lotId: lotId.toString(),
+      zoneId: zoneId.toString(),
+      auctionVehicleIds: [auctionVehicleId.toString()],
+    });
+
+    it('blocks parking when the lot is not fully paid', async () => {
+      setupParkRequest({ payment: { paymentStatus: 'PARTIALLY_PAID' } });
+
+      await expect(service.addFromAuction(parkDto(), admin)).rejects.toThrow(
+        /fully paid/i,
+      );
+      expect(yardVehicleRepository.updateById).not.toHaveBeenCalled();
+    });
+
+    it('blocks parking when paid but no gate pass is uploaded', async () => {
+      setupParkRequest({ payment: { paymentStatus: 'PAID' } });
+
+      await expect(service.addFromAuction(parkDto(), admin)).rejects.toThrow(
+        /gate pass/i,
+      );
+      expect(yardVehicleRepository.updateById).not.toHaveBeenCalled();
+    });
+
+    it('blocks moving an auction vehicle to PARKED through updateStatus when the lot is not ready', async () => {
+      const yardId = new Types.ObjectId();
+      yardVehicleRepository.findById.mockResolvedValue({
+        _id: yardId,
+        organizationId: orgId,
+        sourceType: YardSourceType.AUCTION,
+        lotId,
+        currentStatus: YardVehicleStatus.REGISTERED,
+      });
+      auctionLotRepository.findByOrgAndId.mockResolvedValue({
+        _id: lotId,
+        outcomeStatus: 'DEAL_DONE',
+        payment: { paymentStatus: 'PAID' },
+      });
+
+      await expect(
+        service.updateStatus(
+          yardId.toString(),
+          { status: YardVehicleStatus.PARKED, zoneId: zoneId.toString() },
+          admin,
+        ),
+      ).rejects.toThrow(/gate pass/i);
+      expect(yardVehicleRepository.updateById).not.toHaveBeenCalled();
+    });
+
+    it('allows updateStatus to PARKED once the lot is paid with a gate pass', async () => {
+      const yardId = new Types.ObjectId();
+      const yardVehicle = {
+        _id: yardId,
+        organizationId: orgId,
+        sourceType: YardSourceType.AUCTION,
+        lotId,
+        currentStatus: YardVehicleStatus.REGISTERED,
+      };
+      yardVehicleRepository.findById.mockResolvedValue(yardVehicle);
+      yardVehicleRepository.updateById.mockResolvedValue({
+        ...yardVehicle,
+        currentStatus: YardVehicleStatus.PARKED,
+      });
+      auctionLotRepository.findByOrgAndId.mockResolvedValue({
+        _id: lotId,
+        outcomeStatus: 'DEAL_DONE',
+        payment: { paymentStatus: 'PAID' },
+        gatePass: { documentId: new Types.ObjectId() },
+      });
+      (yardZoneRepository as { findById?: jest.Mock }).findById = jest
+        .fn()
+        .mockResolvedValue({ _id: zoneId, organizationId: orgId });
+
+      await service.updateStatus(
+        yardId.toString(),
+        { status: YardVehicleStatus.PARKED, zoneId: zoneId.toString() },
+        admin,
+      );
+
+      expect(yardVehicleRepository.updateById).toHaveBeenCalledWith(
+        yardId.toString(),
+        expect.objectContaining({ currentStatus: YardVehicleStatus.PARKED }),
+      );
+    });
+
+    it('does not gate non-auction vehicles', async () => {
+      const yardId = new Types.ObjectId();
+      yardVehicleRepository.findById.mockResolvedValue({
+        _id: yardId,
+        organizationId: orgId,
+        sourceType: YardSourceType.LEAD,
+        currentStatus: YardVehicleStatus.AWAITING_ARRIVAL,
+      });
+      yardVehicleRepository.updateById.mockResolvedValue({
+        _id: yardId,
+        currentStatus: YardVehicleStatus.GATE_IN,
+      });
+
+      await service.updateStatus(
+        yardId.toString(),
+        { status: YardVehicleStatus.GATE_IN },
+        admin,
+      );
+
+      expect(auctionLotRepository.findByOrgAndId).not.toHaveBeenCalled();
+    });
   });
 
   it('does not duplicate yard row when invoice is confirmed', async () => {
