@@ -156,6 +156,16 @@ describe('deriveAuctionNextStep', () => {
     expect(result.openLotCount).toBe(3);
   });
 
+  it('returns the id of the first lot waiting on the next step', () => {
+    const result = deriveAuctionNextStep([
+      { ...paidLot(), _id: 'lot-a' },
+      { ...dealDoneUnpaid(), _id: 'lot-b' },
+      { ...dealDoneUnpaid(), _id: 'lot-c' },
+    ]);
+    expect(result.key).toBe('PAYMENT');
+    expect(result.lotId).toBe('lot-b');
+  });
+
   it('one paid lot does not unlock delivery for an unpaid sibling', () => {
     const result = deriveAuctionNextStep([paidLot(), pendingLot()]);
     expect(result.key).toBe('LOT_STATUS');

@@ -588,7 +588,7 @@ export class LifecycleService {
       assertSupportedDocumentFile(file);
       const upload = await this.storageService.uploadFile(
         file,
-        `auctions/${lot.auctionId}/lots/${validatedLotId}/gate-pass`,
+        `auctions/${lot.auctionId.toString()}/lots/${validatedLotId}/gate-pass`,
       );
       const doc = await this.lotDocumentRepository.create({
         organizationId: new Types.ObjectId(orgId),

@@ -63,6 +63,7 @@ export interface LotJourney {
 
 /** Minimal lot shape so the helpers work with documents, plain objects and tests */
 export interface JourneyLotInput {
+  _id?: { toString(): string } | string | null;
   outcomeStatus?: LotOutcomeStatus | string;
   payment?: { paymentStatus?: LotPaymentStatus | string } | null;
   delivery?: {
@@ -81,6 +82,8 @@ export interface AuctionNextStep {
   key: JourneyNextStepKey | 'ADD_LOTS' | 'CLOSED' | 'CANCELLED';
   label: string;
   action: JourneyActionKey | null;
+  /** First lot waiting on this step, so the UI can open that lot directly */
+  lotId?: string;
   /** Lots currently waiting on this step */
   lotCount: number;
   /** Lots that are still open (not rejected / left) */
@@ -290,7 +293,7 @@ export function deriveAuctionNextStep(
   }
 
   const open = lots
-    .map((lot) => deriveLotJourney(lot))
+    .map((lot) => ({ lot, ...deriveLotJourney(lot) }))
     .filter((journey) => !journey.closed);
 
   if (!open.length) {
@@ -312,12 +315,14 @@ export function deriveAuctionNextStep(
   const lowest = Math.min(...open.map(rank));
   const atLowest = open.filter((journey) => rank(journey) === lowest);
   const next = atLowest[0].nextStep;
+  const lotId = atLowest[0].lot._id?.toString();
 
   if (!next) {
     return {
       key: 'READY_FOR_YARD',
       label: READY_FOR_YARD_NEXT.label,
       action: null,
+      lotId,
       lotCount: atLowest.length,
       openLotCount: open.length,
     };
@@ -327,6 +332,7 @@ export function deriveAuctionNextStep(
     key: next.key,
     label: next.label,
     action: next.action,
+    lotId,
     lotCount: atLowest.length,
     openLotCount: open.length,
   };

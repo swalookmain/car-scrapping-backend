@@ -1,199 +1,274 @@
 # Auction to Dismantling Guide
 
-_How to take a vehicle from auction win to parts sale, one clear step at a time._
+_A simple, step-by-step guide. From winning an auction to selling the parts._
 
 Last updated: 24 November 2026
 
-## The journey at a glance
+## Read this first
 
-1. Create the auction
-2. Update the lot status
-3. Record the payment
-4. Add delivery details
-5. Upload the gate pass
-6. RCM details (only if applicable)
-7. Park the vehicles in the yard
-8. Start dismantling
-9. Add parts to inventory
-10. Track the COD
-11. Sell the parts
+- **You do not need training.** The app always shows the next thing to do.
+- **Every lot has its own steps.** Lot 1 can be paid while Lot 2 is still waiting. One lot never blocks another.
+- **A grey step with a lock is not broken.** It is waiting for the step before it. It tells you why.
+- **A vehicle can enter your yard only when its lot is Deal Done, fully paid, and the gate pass is uploaded.**
 
-## Three rules to remember
+## The journey in four parts
 
-- **Work in order.** The app shows your **Next step** for every auction. Finish it and the following step opens.
-- **Locked is not broken.** A locked step always shows the reason (for example "Needs full payment"). Complete the step before it.
-- **A vehicle can enter the yard only when its lot is Deal Done, fully paid, and the gate pass is uploaded.**
+- **A. Win the auction:** 1. Create the auction → 2. Say what happened to each lot
+- **B. Pay and collect:** 3. Pay for the lot → 4. Add delivery details → 5. Upload the gate pass → 6. RCM details (only if they apply to you)
+- **C. Yard and dismantling:** 7. Park the vehicles in the yard → 8. Start dismantling → 9. Add the parts you recovered
+- **D. Papers and sales:** 10. Record the COD → 11. Sell the parts
+
+## How the app guides you, lot by lot
+
+1. Open **Auctions** from the left menu.
+2. Look at the **Next step** column. It tells you what to do for each auction. Click it.
+3. A window opens. Your **lots are on the left**. The **steps of the selected lot are on the right**.
+4. The step marked **Next** is already open. Fill it in and click the save button.
+5. The window moves to the following step by itself.
+6. When a lot is finished, click **Next lot that needs work** at the bottom.
+
+| Label | Meaning |
+| --- | --- |
+| Done | You finished this step. You can still open it to look or change it. |
+| Next | Do this one now. It is already open for you. |
+| Available | You can do this step any time. |
+| Locked | Not yet. The step before it is not finished. The reason is written below it. |
+| Not needed | The lot was Rejected or Left, so nothing more is needed. |
+
+## Which screen do I use?
+
+| I want to… | Go to |
+| --- | --- |
+| I won or lost a lot | Auctions → click **Next step** → step 1 (Update lot status) |
+| I paid money for a lot | Auctions → click **Next step** → Record payment |
+| I received the delivery order | Auctions → click **Next step** → Delivery details |
+| I received the gate pass | Auctions → click **Next step** → Gate pass |
+| The vehicles arrived at my yard | Yard Management → the **+** button → Add auction vehicles to yard |
+| I started taking a vehicle apart | Yard Management → open the vehicle → **Start dismantling** |
+| I recovered parts | Inventory → Parts Inventory → the **+** button |
+| I got the COD | COD Tracking → add a record |
+| I sold parts | Sales → Sales Invoices |
+
+# A. Win the auction
 
 ## Step 1. Create the auction
 
-**Where:** Auctions → Auctions → the + (Add New) button
+**Where:** Auctions → the **+** button (Add New)
 
-**Goal:** Record the auction, its lots and the vehicles in each lot.
+**Why:** Save the auction, its lots and its vehicles in the app.
 
-1. **Auction details:** auctioner, auction number, buyer reference number, auction date, start and end time, inspection dates and vehicle location. Click **Next**.
-2. **Lots:** add every lot you are bidding on (lot name, lot number, pre-EMD amount, description and number of vehicles).
-3. **Vehicles & photos:** enter each vehicle (type, make, model, variant, vehicle number, colour, chassis last 5, year) and add photos. Save.
+**What to do:**
 
-**You can move on when:** The auction appears in the Auctions list with the Next step **Update lot status**.
+1. **Auction details:** auctioner, auction number, buyer reference number, dates, times and where the vehicles are. Click **Next**.
+2. **Lots:** add each lot you are bidding on. Give it a name and number, the pre-EMD amount and how many vehicles it has.
+3. **Vehicles & photos:** for each vehicle, enter the type, make, model, vehicle number, colour, chassis last 5 and year. Add photos. Save.
 
-## Step 2. Update the lot status
+**Done when:** The auction shows in the Auctions list. Its Next step says **Update lot status**.
 
-**Where:** Auctions list → click the **Next step** chip, or ⋮ → **Manage lot steps**
+## Step 2. Say what happened to each lot
 
-**Goal:** Tell the system what happened to each lot after bidding.
+**Where:** Auctions → click **Next step** → step 1, **Update lot status**
 
-1. For each lot choose the **Outcome status**: **Pending** (waiting), **STA** (subject to approval), **Deal Done** (you won it), **Rejected** or **Left**.
-2. For **Deal Done** enter the **Total amount**, **Pre-EMD amount**, **Closing date & time** and **Payment due date**. The balance to pay is calculated for you.
-3. Click **Save changes**.
+**Why:** Tell the app if you won, lost or are still waiting.
 
-**You can move on when:** The lot is **Deal Done**. Rejected and Left lots stop here and need no further steps.
+**What to do:**
 
-> Tip: Only Pending and STA lots can still be edited. After you save Deal Done, Rejected or Left, the lot is read-only.
+1. Pick the **Outcome status**: **Pending** (waiting), **STA** (waiting for approval), **Deal Done** (you won), **Rejected** or **Left**.
+2. If you chose **Deal Done**, fill in the **Total amount**, **Pre-EMD amount**, **Closing date & time** and **Payment due date**. The balance to pay is worked out for you.
+3. Click **Save and continue**.
 
-## Step 3. Record the payment
+**Done when:** The lot says **Deal Done**. Rejected and Left lots are finished here. Nothing more is needed for them.
 
-**Where:** Manage lot steps → **Payment** (or the Next step chip **Record payment**)
+> Tip: Pending and STA can still be changed. Once you save Deal Done, Rejected or Left, it cannot be changed.
 
-**Goal:** Pay the full amount for each Deal Done lot.
+# B. Pay and collect
 
-1. Open the lot and click **Add payment**. Enter the amount, transaction number, bank and remark.
-2. If a penalty applies, click **Add penalty**.
-3. Watch the summary: **Total due**, **Penalty**, **Paid** and **Left to pay**.
-4. When nothing is left to pay, record whether the **acceptance letter** has been received (letter number and received date).
+## Step 3. Pay for the lot
 
-**You can move on when:** Payment status shows **Paid** (Left to pay is 0).
+**Where:** Same window → step 2, **Record payment**
 
-> Tip: Payment status moves Not paid → Partially paid → Paid as you add payments.
+**Why:** Record every payment until nothing is left to pay.
+
+**What to do:**
+
+1. Click **Add payment**. Enter the amount, transaction number, bank and a short remark. Save.
+2. If there is a penalty, click **Add penalty**.
+3. Watch the boxes: **Total due**, **Penalty**, **Paid**, **Left to pay**.
+4. When **Left to pay** is 0, note if the **acceptance letter** was received (letter number and date).
+
+**Done when:** The lot is **Paid** (Left to pay is 0). Delivery and Gate pass unlock.
+
+> Tip: You can pay in parts. The status goes Not paid → Partially paid → Paid.
 
 ## Step 4. Add delivery details
 
-**Where:** Manage lot steps → **Delivery**
+**Where:** Same window → step 3, **Delivery details**
 
-**Goal:** Record how and until when the vehicles can be lifted.
+**Why:** Write down how and until when the vehicles can be taken.
+
+**What to do:**
 
 1. Enter the **Delivery order number**.
 2. Enter the **Last date of lifting**.
-3. Set **Final approval for lifting** to Yes once you have it, then save.
-4. On this screen you can also create the **authorization letter** once every Deal Done lot is paid and has final approval and a last lifting date.
+3. Choose **Final approval for lifting: Yes** when you have it. Click **Save delivery**.
+4. On this step you can also create the **authorization letter**. It is ready when every Deal Done lot is paid and has final approval and a last lifting date.
 
-**You can move on when:** Delivery order, last lifting date and final approval are saved.
+**Done when:** The delivery order, last lifting date and approval are saved.
 
-> Tip: Delivery is available only after the lot is fully paid.
+> Tip: This step opens only after the lot is fully paid.
 
 ## Step 5. Upload the gate pass
 
-**Where:** Manage lot steps → **Gate pass**
+**Where:** Same window → step 4, **Gate pass**
 
-**Goal:** Keep the gate pass on file. It is what lets the vehicle into your yard.
+**Why:** Keep the gate pass in the app. It lets the vehicles into your yard.
+
+**What to do:**
 
 1. Enter the **Date of gate pass**.
-2. Upload the gate pass as an image or PDF (within the size limit shown on screen).
-3. Click **Save gate pass**. A **View gate pass** link confirms it is stored.
+2. Upload the gate pass as a photo or PDF.
+3. Click **Save gate pass**. A **View gate pass** link shows it is saved.
 
-**You can move on when:** The lot shows **Park in yard** as ready, with a green **Go to Yard** button.
+**Done when:** A green box says the lot is **ready to park in the yard**, with a **Go to Yard** button.
 
-> Tip: The gate pass is available only after the lot is fully paid.
+> Tip: This step opens only after the lot is fully paid.
 
-## Step 6. RCM details (only if applicable)
+## Step 6. RCM details (only if they apply to you)
 
-**Where:** Manage lot steps → **RCM detail**
+**Where:** Same window → step 5, **RCM detail**
 
-**Goal:** Record the reverse-charge (RCM) GST challan if it applies to your purchase.
+**Why:** Record the reverse charge (RCM) GST challan, if you have one.
 
-1. Enter the **Challan number**, **Transaction date** and **Amount**, then save.
+**What to do:**
 
-**You can move on when:** This step is optional. It never blocks parking in the yard.
+1. Enter the **Challan number**, **Transaction date** and **Amount**. Save.
+
+**Done when:** This step is optional. It never stops you from parking in the yard. Skip it if it does not apply.
+
+# C. Yard and dismantling
 
 ## Step 7. Park the vehicles in the yard
 
-**Where:** Yard Management → the + (Add New) button → **Add auction vehicles to yard**
+**Where:** Yard Management → the **+** button → **Add auction vehicles to yard**
 
-**Goal:** Bring the won vehicles into your yard records.
+**Why:** Bring the vehicles into your yard records.
 
-1. Choose the **Auction** and the **Confirmed lot**. Lots that are not ready are greyed out with the reason.
+**What to do:**
+
+1. Choose the **Auction** and the **Confirmed lot**. A lot that is not ready is grey and says why.
 2. All vehicles of the lot are ticked. Untick any you are not parking now.
-3. Choose the **Zone** (required). Add a **Slot** and **Notes** if you wish.
+3. Choose the **Zone** (required). Add a **Slot** and **Notes** if you like.
 4. Click **Park selected**.
 
-**You can move on when:** Each vehicle shows the status **Parked** in Yard Management.
+**Done when:** Each vehicle shows the status **Parked**.
 
-> Tip: If a lot is locked here, go back to Auctions → Manage lot steps and finish payment and the gate pass.
-> Tip: A zone must exist first. Your admin sets up zones in Yard Management.
+> Tip: A lot is grey? Go back to Auctions, click its Next step, and finish payment and the gate pass.
+> Tip: Zones must exist first. Ask your admin to create them in Yard Management.
 
 ## Step 8. Start dismantling
 
 **Where:** Yard Management → open the vehicle (eye icon) → **Start dismantling**
 
-**Goal:** Mark the vehicle as being taken apart so you can record its parts.
+**Why:** Tell the app you are taking the vehicle apart.
 
-1. Open the parked vehicle and click **Start dismantling**. Its status becomes **Dismantling**.
-2. You can also start it from the inventory form when you pick the vehicle.
+**What to do:**
 
-**You can move on when:** The vehicle status is **Dismantling**.
+1. Open the parked vehicle.
+2. Click **Start dismantling**. The status becomes **Dismantling**.
 
-## Step 9. Add parts to inventory
+**Done when:** The vehicle status is **Dismantling**.
 
-**Where:** Inventory → Parts Inventory → the + (Add New) button
+> Tip: You can also press Start dismantling from the inventory form after you pick the vehicle.
 
-**Goal:** Record every part recovered from the vehicle.
+## Step 9. Add the parts you recovered
+
+**Where:** Inventory → Parts Inventory → the **+** button
+
+**Why:** Record every part that came out of the vehicle.
+
+**What to do:**
 
 1. Choose the yard vehicle. It must be in Dismantling.
-2. Save the vehicle weight (KG) if asked.
-3. Pick the parts from the checklist, fill in their details and click **Create**.
+2. Save the vehicle weight in KG if the form asks for it.
+3. Pick the parts from the list, fill in their details and click **Create**.
 
-**You can move on when:** Parts appear in Parts Inventory. The vehicle is marked **Dismantled** and you can add more parts later.
+**Done when:** The parts show in Parts Inventory. The vehicle becomes **Dismantled**. You can add more parts later.
 
 > Tip: If you see "Start dismantling to add parts", go back to the previous step.
 
-## Step 10. Track the COD
+# D. Papers and sales
 
-**Where:** COD Tracking → Add record
+## Step 10. Record the COD
 
-**Goal:** Record the Certificate of Deposit (COD) for the vehicle.
+**Where:** COD Tracking → add a record
+
+**Why:** Keep the Certificate of Deposit (COD) of the vehicle.
+
+**What to do:**
 
 1. Choose the vehicle and switch on **COD Generated**.
-2. Enter the **COD Inward Number** and **COD Issue Date** (both are required).
-3. Add the **COD Document** and save.
+2. Enter the **COD Inward Number** and the **COD Issue Date**. Both are needed.
+3. Add the **COD Document**. Save.
 
-**You can move on when:** The vehicle shows COD as generated.
+**Done when:** The vehicle shows COD as generated.
 
-> Tip: Parts of a vehicle can be sold only after its COD is generated.
+> Tip: You can sell the parts of a vehicle only after its COD is recorded.
 
 ## Step 11. Sell the parts
 
 **Where:** Sales → Buyers, then Sales → Sales Invoices
 
-**Goal:** Invoice your buyer and reduce stock.
+**Why:** Make the invoice for your buyer. Your stock goes down.
 
-1. Add the buyer under **Buyers** if they are new.
-2. Under **Sales Invoices** create an invoice with the parts being sold. It is saved as a draft.
-3. Review and **Confirm** the invoice. Stock is deducted automatically.
+**What to do:**
 
-**You can move on when:** The invoice is confirmed and inventory is reduced.
+1. Add the buyer in **Buyers** if the buyer is new.
+2. In **Sales Invoices**, create an invoice and add the parts you are selling. It is saved as a draft.
+3. Check it and click **Confirm**. Your stock goes down automatically.
 
-> Tip: Confirmation is blocked if the vehicle has no COD generated.
-> Tip: Cancelling a confirmed invoice puts the stock back.
+**Done when:** The invoice is confirmed and the stock is reduced.
+
+> Tip: Confirm is blocked if the vehicle has no COD recorded.
+> Tip: If you cancel a confirmed invoice, the stock comes back.
+
+## Common questions
+
+| Question | Answer |
+| --- | --- |
+| Can I fix a mistake? | Yes. Open the step again. Done steps say **View / edit**. The only exception is the lot status after you save Deal Done, Rejected or Left. |
+| Do all my lots have to be paid before I use the yard? | No. Each lot is separate. A paid lot with a gate pass can be parked while the others are still waiting. |
+| What if I lost or left a lot? | Mark it Rejected or Left in step 1. Nothing more is needed for that lot. |
+| Do I have to do the RCM step? | Only if RCM applies to you. It never blocks the yard. |
+| Where do I create the authorization letter? | In the Delivery details step. It is ready when every Deal Done lot is paid and has final approval and a last lifting date. |
 
 ## If something is locked or blocked
 
 | Message | What to do |
 | --- | --- |
-| Lot must be marked Deal Done first | Open Manage lot steps and save the lot as Deal Done. |
+| Lot must be marked Deal Done first | Open the lot, go to step 1 and save it as Deal Done. |
 | Needs full payment / Lot must be fully paid before parking in yard | Add payments until **Left to pay** is 0. |
 | Upload the gate pass before parking in yard | Open the Gate pass step, add the date and upload the file. |
-| Available after payment is complete | Finish the payment step. Delivery and Gate pass unlock afterwards. |
+| Available after payment is complete | Finish the payment step. Delivery and Gate pass open after that. |
 | Start dismantling to add parts | Open the vehicle in Yard Management and click **Start dismantling**. |
-| COD not generated for vehicle | Open COD Tracking and mark COD generated with the inward number and issue date. |
+| COD not generated for vehicle | Open COD Tracking and record the COD with its inward number and issue date. |
 
 ## Words used in the app
 
-| Term | Meaning |
+| Word | Meaning |
 | --- | --- |
-| STA | Subject to approval. The bid is not final yet. |
-| Deal Done | You won the lot. Payment and the next steps now apply. |
-| Pre-EMD | Earnest money deposited before the auction. It reduces the balance you pay. |
-| Gate pass | The document that lets the vehicle leave the auction site. |
-| RCM | Reverse charge mechanism, a GST payment made through a challan. |
+| STA | Subject to approval. Your bid is not final yet. |
+| Deal Done | You won the lot. |
+| Pre-EMD | Money you paid before the auction. It is taken off what you owe. |
+| Gate pass | The paper that lets the vehicle leave the auction site. |
+| RCM | Reverse charge. A GST payment made with a challan. |
 | COD | Certificate of Deposit for the vehicle. |
-| Parked | The vehicle is in the yard and ready to be dismantled. |
-| Dismantling / Dismantled | Parts are being or have been recovered from the vehicle. |
+| Parked | The vehicle is in your yard. |
+| Dismantling / Dismantled | Parts are being taken out / have been taken out of the vehicle. |
+
+## Lot checklist (print and tick)
+
+| Lot | Deal Done | Paid | Delivery | Gate pass | In yard | Dismantling | Parts | COD | Sold |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| | [ ] | [ ] | [ ] | [ ] | [ ] | [ ] | [ ] | [ ] | [ ] |
+| | [ ] | [ ] | [ ] | [ ] | [ ] | [ ] | [ ] | [ ] | [ ] |
+| | [ ] | [ ] | [ ] | [ ] | [ ] | [ ] | [ ] | [ ] | [ ] |
