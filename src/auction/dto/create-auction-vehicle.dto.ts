@@ -3,6 +3,7 @@ import {
   IsArray,
   IsBoolean,
   IsEnum,
+  IsMongoId,
   IsNumber,
   IsOptional,
   IsString,
@@ -92,10 +93,18 @@ export class CreateAuctionVehicleDto {
   remarks?: string;
 }
 
+/** Batch row: optional `id` of an existing auction vehicle so it is updated in place. */
+export class CreateAuctionVehicleBatchItemDto extends CreateAuctionVehicleDto {
+  @ApiPropertyOptional({ description: 'Existing auction vehicle id (update in place)' })
+  @IsMongoId()
+  @IsOptional()
+  id?: string;
+}
+
 export class CreateAuctionVehicleBatchDto {
-  @ApiPropertyOptional({ type: [CreateAuctionVehicleDto] })
+  @ApiPropertyOptional({ type: [CreateAuctionVehicleBatchItemDto] })
   @IsArray()
   @ValidateNested({ each: true })
-  @Type(() => CreateAuctionVehicleDto)
-  vehicles: CreateAuctionVehicleDto[];
+  @Type(() => CreateAuctionVehicleBatchItemDto)
+  vehicles: CreateAuctionVehicleBatchItemDto[];
 }

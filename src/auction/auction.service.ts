@@ -630,17 +630,68 @@ export class AuctionService implements OnModuleInit {
       orgId,
       validatedLotId,
     );
-    for (const existingVehicle of existingVehicles) {
-      await this.yardService.removeYardEntryForAuctionVehicleIfIdle(
-        orgId,
-        existingVehicle._id.toString(),
-      );
-      await this.auctionVehicleRepository.deleteById(existingVehicle._id.toString());
+    vehicles.forEach((vehicle) => this.validateVehiclePayload(vehicle));
+
+    // Match payload rows to existing vehicles so they are updated in place
+    // (never delete + recreate: that breaks the yard link and fails once in yard ops).
+    const sortedExisting = [...existingVehicles].sort((a, b) =>
+      a._id.toString().localeCompare(b._id.toString()),
+    );
+    const existingById = new Map(
+      sortedExisting.map((v) => [v._id.toString(), v] as const),
+    );
+    const usedIds = new Set<string>();
+    const matched: (typeof sortedExisting[number] | undefined)[] = vehicles.map(
+      (vehicle) => {
+        const id = vehicle.id?.toString();
+        if (id && existingById.has(id) && !usedIds.has(id)) {
+          usedIds.add(id);
+          return existingById.get(id);
+        }
+        return undefined;
+      },
+    );
+    const unusedExisting = sortedExisting.filter(
+      (v) => !usedIds.has(v._id.toString()),
+    );
+    for (let i = 0; i < matched.length; i += 1) {
+      if (matched[i] || !unusedExisting.length) continue;
+      const next = unusedExisting.shift() as (typeof sortedExisting)[number];
+      usedIds.add(next._id.toString());
+      matched[i] = next;
     }
+
     const created: Record<string, unknown>[] = [];
-    for (const vehicle of vehicles) {
-      this.validateVehiclePayload(vehicle);
+    for (let i = 0; i < vehicles.length; i += 1) {
+      const vehicle = vehicles[i];
       const plate = this.normalizeAuctionVehiclePlate(vehicle);
+      const existingVehicle = matched[i];
+      if (existingVehicle) {
+        const vehicleId = existingVehicle._id.toString();
+        await this.auctionVehicleRepository.updateById(vehicleId, {
+          vehicleType: vehicle.vehicleType,
+          make: vehicle.make,
+          vehicleModel: vehicle.model,
+          variant: vehicle.variant,
+          vehicleNumber: plate || vehicle.vehicleNumber?.trim() || '',
+          registrationNumber: plate || '',
+          chassisLast5: vehicle.chassisLast5?.toUpperCase() || '',
+          yearOfManufacture: vehicle.yearOfManufacture ?? null,
+          color: vehicle.color,
+          updatedBy: new Types.ObjectId(authenticatedUser.userId),
+        });
+        const updatedVehicle = await this.auctionVehicleRepository.findById(vehicleId);
+        if (!updatedVehicle) throw new NotFoundException('Vehicle not found');
+        const yardVehicle = await this.yardService.ensureYardEntryForAuctionVehicle(
+          updatedVehicle,
+          authenticatedUser,
+        );
+        const plainUpdated =
+          (updatedVehicle as { toObject?: () => Record<string, unknown> }).toObject?.() ||
+          (updatedVehicle as unknown as Record<string, unknown>);
+        created.push({ ...plainUpdated, yardVehicleId: yardVehicle?._id });
+        continue;
+      }
       const createdVehicle = await this.auctionVehicleRepository.create({
         vehicleType: vehicle.vehicleType,
         make: vehicle.make,
@@ -668,6 +719,14 @@ export class AuctionService implements OnModuleInit {
         ...plain,
         yardVehicleId: yardVehicle?._id,
       });
+    }
+    // Existing vehicles not present in the payload (e.g. vehicle count reduced) are removed.
+    for (const extra of unusedExisting) {
+      await this.yardService.removeYardEntryForAuctionVehicleIfIdle(
+        orgId,
+        extra._id.toString(),
+      );
+      await this.auctionVehicleRepository.deleteById(extra._id.toString());
     }
     await this.syncAuctionInvoiceMapping(lot.auctionId.toString(), orgId);
     return created;
